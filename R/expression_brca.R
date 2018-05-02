@@ -23,6 +23,29 @@ synLogin()
 # expression quantification and sample mappings 
 sample.map <- synTableQuery("SELECT replace(name, '_rsem.genes.results.txt', '') as sample, catalogNumber, cellType, experimentalCondition, organ, tumorType FROM syn10320914 WHERE diagnosis = 'Breast Cancer'  AND study = 'RNA Study' And fileFormat = 'txt' And name like '%rsem%'") %>% as.data.frame()
 sample.map <- sample.map[ ,-c(1:3)]
+sample.map <- sample.map %>% 
+  mutate(experimentalCondition = str_replace_all(
+    experimentalCondition, " Acid", "Acid"
+  )) %>%
+  separate(experimentalCondition,
+           into = c("stiffness","stiffness_units", "surface"),
+           remove = FALSE, extra = "merge", fill = "left") %>%
+  mutate(
+    surface = case_when(
+      surface %in% c("Collagen", "Fibronectin") ~ experimentalCondition,
+      TRUE ~ surface
+    ),
+    stiffness_units = ifelse(is.na(stiffness), NA, stiffness_units)
+  ) %>%
+  separate(surface, into = c("surface", "laminate")) %>%
+  mutate(
+    stiffness = parse_number(stiffness),
+    stiffness_units = str_trim(stiffness_units),
+    stiffness_norm = case_when(
+      stiffness_units == "Pa" ~ stiffness / 1000,
+      TRUE ~ stiffness
+    )
+  )
 
 expr.view <- synTableQuery("SELECT * FROM syn10320914 WHERE diagnosis = 'Breast Cancer'  AND study = 'RNA Study' And fileFormat = 'txt' And name like '%rsem%'") %>% as.data.frame()
 expr.view <- expr.view[ ,-c(1:3)]
@@ -45,12 +68,6 @@ tpm.matrix <- tpm.dat %>%
   Reduce(function(df1, df2) left_join(df1, df2, by = "gene_id"), .) %>%
   as.matrix()
 
-tpm.df <- tpm.dat %>%
-  Reduce(function(df1, df2) left_join(df1, df2, by = "gene_id"), .) %>%
-  as.data.frame()
-
-# save(tpm.matrix, file = "TPM_mRNA_expression_matrix.RData")
-# save(tpm.df, file = "TPM_mRNA_expression_df.RData")
-# save(sample.map, file = "sample_map_df.RData")
-
+save(tpm.matrix, file = "TPM_mRNA_expression_matrix.RData")
+save(sample.map, file = "sample_map_df.RData")
 

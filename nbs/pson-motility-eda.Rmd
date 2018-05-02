@@ -1,0 +1,574 @@
+---
+title: "PSON Cell Line Data Exploration"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(synapser)
+library(stringr)
+library(janitor)
+library(ggthemes)
+library(patchwork)
+library(forcats)
+library(broom)
+library(kableExtra)
+```
+
+```{r}
+synLogin()
+```
+
+## Data collection
+
+### Expression data
+
+```{r}
+# collect "sample" metadata for cell lines with expression data available 
+prot_rna_meta_fv_id <- "syn10320914"
+
+sample_df <- synTableQuery(
+  str_glue(
+    "SELECT replace(name, '_rsem.genes.results.txt', '') as sample, id,
+     diagnosis, cellType, catalogNumber, cellLine, 
+     experimentalCondition, organ, tumorType 
+     FROM {fv_id} 
+     WHERE study = 'RNA Study' AND name LIKE '%rsem%'",
+    fv_id = prot_rna_meta_fv_id
+  ),
+  includeRowIdAndRowVersion = FALSE
+) %>% 
+  as.data.frame()
+```
+
+```{r, warning=FALSE}
+sample_tidy_df <- sample_df %>% 
+  # tidy up experimental condition info
+  mutate(experimentalCondition = str_replace_all(
+    experimentalCondition, " Acid", "Acid"
+  )) %>%
+  separate(experimentalCondition,
+           into = c("stiffness","stiffness_units", "surface"),
+           remove = FALSE, extra = "merge", fill = "left") %>%
+  mutate(
+    surface = case_when(
+      surface %in% c("Collagen", "Fibronectin") ~ experimentalCondition,
+      TRUE ~ surface
+    ),
+    stiffness_units = ifelse(is.na(stiffness), NA, stiffness_units)
+  ) %>%
+  separate(surface, into = c("surface", "laminate")) %>%
+  mutate(
+    stiffness = parse_number(stiffness),
+    stiffness_units = str_trim(stiffness_units),
+    stiffness_norm = case_when(
+      stiffness_units == "Pa" ~ stiffness / 1000,
+      TRUE ~ stiffness
+    )
+  )
+```
+
+
+```{r, message=FALSE}
+# extract expression data from individual files
+extract_expr_tpm <- function(syn_id) {
+  synGet(syn_id) %>% 
+    pluck("path") %>% 
+    read_tsv() %>% 
+    select(gene_id, TPM)
+}
+
+sample_id_map <- sample_tidy_df %>% 
+  select(sample, id) %>% 
+  deframe()
+
+pson_expr_tpm_file <- "../data/pson_expr_tpm_df.RData"
+if (!fs::file_exists(pson_expr_tpm_file)) {
+  # collect expression data for all cell lines and conditions
+  pson_expr_tpm_df <- sample_tidy_df %>% 
+    pluck("id") %>% 
+    set_names() %>% 
+    map_df(extract_expr_tpm, .id = "id") %>% 
+    spread(id, TPM) %>% 
+    rename(!!!sample_id_map)
+  save(pson_expr_tpm_df, file = pson_expr_tpm_file)
+} else {
+  load(pson_expr_tpm_file)
+}
+```
+
+
+### Motility data
+
+```{r}
+# retrieve cell line motility metadata from Synapse file view
+motil_meta_fv_id <- "syn7747734"
+
+pson_motil_meta_df <- synTableQuery(
+  str_glue("SELECT id, catalogNumber, experimentalCondition FROM {fv_id} 
+            WHERE study = 'Motility' AND name LIKE '%summary%'", 
+           fv_id = motil_meta_fv_id),
+  includeRowIdAndRowVersion = FALSE
+) %>% 
+  as.data.frame() %>% 
+  # format experimental condition to match sample dataframe above
+  mutate(experimentalCondition = str_replace_all(
+    experimentalCondition, " Acid", "Acid"
+  ))
+```
+
+```{r}
+# build and save master sample dataframe
+sample_map_df <- sample_tidy_df %>% 
+  left_join(pson_motil_meta_df, 
+            by = c("catalogNumber", "experimentalCondition"),
+            suffix = c("_expr", "_motil"))
+```
+
+```{r, message=FALSE}
+# extract motility summary data from individual files
+extract_motil_summary <- function(syn_id) {
+  if (!is.na(syn_id)) {
+    synGet(syn_id) %>% 
+      pluck("path") %>% 
+      # only take the first 4 rows; anything after that is unstructured and might
+      # cause errors
+      read_tsv(n_max = 4) %>% 
+      # clean and standardize columns and row names based on readme info 
+      # ftp://caftpd.nci.nih.gov/psondcc/PhysicalCharacterization/Motility/README.txt
+      clean_names() %>% 
+      mutate(statistic = c(
+        "average_value", 
+        "total_number_of_cells_tracked" ,
+        "standard_deviation", 
+        "standard_error"
+      )) %>% 
+      gather(summary_metric, value, -statistic) %>% 
+      spread(statistic, value)
+  } else {
+    data.frame()
+  }
+}
+
+pson_motil_summary_file <- "../data/pson_motility_summary_df.RData"
+if (!fs::file_exists(pson_motil_summary_file)) {
+  # collect summary data for all cell lines and conditions
+  pson_motil_summary_df <- sample_map_df %>% 
+    pluck("id_motil") %>% 
+    set_names() %>% 
+    map_df(extract_motil_summary, .id = "id_motil") %>% 
+    left_join(
+      sample_map_df,
+      by = "id_motil"
+    )
+  save(pson_motil_summary_df, file = pson_motil_summary_file)
+} else {
+  load(pson_motil_summary_file)
+}
+```
+
+
+## Data formatting
+
+Now that I have the basic information downloaded and stored in relatively usable formats, I'll do a bit of tidying and minimal "feature engineering" to faciliate visualization and analysis below.
+
+### Expression data
+
+For the expression data, I'll just convert the dataframe of TPM values into a matrix and save the file to share (providing an alternative format for anyone who wants to use it). I could also normalize the data (i.e., log transform), but I'll save that for the analysis steps.
+
+```{r}
+pson_expr_tpm_mat_file <- "../data/pson_expr_tpm_mat.RData"
+if (!fs::file_exists(pson_expr_tpm_mat_file)) {
+  pson_expr_tpm_mat <- pson_expr_tpm_df %>% 
+    column_to_rownames("gene_id") %>% 
+    as.matrix()
+  save(pson_expr_tpm_mat, file = pson_expr_tpm_mat_file)
+} else {
+  load(pson_expr_tpm_mat_file)
+}
+```
+
+### Motility data 
+
+```{r, warning=FALSE}
+scale_this <- function(x) as.vector(scale(x))
+
+pson_motil_tidy_file <- "../data/pson_motility_tidy_df.RData"
+if (!fs::file_exists(pson_motil_tidy_file)) {
+  # scale and center motility measurement data
+  pson_motil_tidy_df <- pson_motil_summary_df %>%
+    group_by(cellLine, summary_metric) %>% 
+    mutate(average_value_scaled = scale_this(average_value)) %>%
+    ungroup()
+  save(pson_motil_tidy_df, file = pson_motil_tidy_file)
+} else {
+  load(pson_motil_tidy_file)
+}
+```
+
+## Exploratory data analysis
+
+### Cell line motility overview
+
+```{r}
+# format motility data for plotting (set up factors for axis ordering, etc.)
+plot_df <- pson_motil_tidy_df %>%
+  group_by(diagnosis, cellLine) %>% 
+  mutate(
+    cv_scaled_value = sd(average_value_scaled) / mean(average_value_scaled)
+  ) %>% 
+  ungroup() %>% 
+  arrange(desc(cv_scaled_value)) %>% 
+  replace_na(list(stiffness_norm = "NA", laminate = "NA")) %>% 
+  mutate(diagnosis = fct_inorder(diagnosis),
+         diagnosis = fct_relevel(diagnosis, "Not Applicable", after = Inf)) %>% 
+  arrange(as.integer(diagnosis)) %>% 
+  mutate(cellLine = fct_inorder(cellLine),
+         source = if_else(diagnosis == "Not Applicable", 
+                          "immortalized", "human"))
+```
+
+
+```{r}
+plot_df %>% 
+  filter(diagnosis %in% c("Breast Cancer")) %>%
+  ggplot(aes(x = cellLine, y = average_value)) +
+  geom_col(aes(fill = laminate, alpha = stiffness_norm), 
+           position = position_dodge(0.9)) +
+  geom_errorbar(
+    aes(ymin = average_value - standard_error, 
+        ymax = average_value + standard_error, 
+        color = laminate, 
+        alpha = stiffness_norm), 
+    size = 0.5, width = 0.25, position = position_dodge(0.9)
+  ) +
+  scale_alpha_manual("stiffness [kPa]", values = c(0.3, 1, 1)) +
+  scale_color_manual(values = c("black", "black", "black")) +
+  scale_fill_brewer(palette = "Set1") +
+  facet_grid(summary_metric ~ surface, scales = "free_y") +
+  labs(title = "Average motility measures vs. surface") +
+  xlab("cell line") +
+  ylab("") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### Average values
+
+```{r}
+p_speed <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average speed [um/hr]") + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank()) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_dist <- plot_df %>% 
+  filter(summary_metric == "total_distance_um") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average distance [um]", option = 3) + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank(),
+        plot.margin = margin(t = -10)) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_diag <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = 1)) + 
+  geom_tile(aes(fill = diagnosis), colour = "white", size = 0.2) + 
+  scale_fill_manual(values = c(RColorBrewer::brewer.pal(9, "Set1"), "black")) +
+  ylab("") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.margin = margin(t = 80),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.key.size = ggplot2::unit(8, "pt"),
+        legend.text = element_text(size = 8),
+        strip.text.x = element_blank(),
+        plot.margin = margin(t = -5, b = 10)) +
+  facet_grid(. ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_comb <- p_speed + p_dist + p_diag + 
+  plot_layout(ncol = 1, heights = c(20, 20, 2.5))
+p_comb
+```
+
+#### Scaled and centered
+
+```{r}
+p_diag <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = 1)) + 
+  geom_tile(aes(fill = diagnosis), colour = "white", size = 0.2) + 
+  scale_fill_manual(values = c(RColorBrewer::brewer.pal(9, "Set1"), "black")) +
+  scale_x_discrete(position = "top") + 
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.margin = margin(t = -60),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.key.size = ggplot2::unit(8, "pt"),
+        legend.text = element_text(size = 8),
+        strip.text.x = element_blank(),
+        plot.margin = margin(t = -5, b = 10)) +
+  facet_grid(. ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_speed <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value_scaled), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average speed* [um/hr]") + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank()) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_dist <- plot_df %>% 
+  filter(summary_metric == "total_distance_um") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value_scaled), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average distance* [um]", option = 3) + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank(),
+        plot.margin = margin(b = 10)) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+
+
+p_comb <- p_diag + p_speed + p_dist + 
+  plot_layout(ncol = 1, heights = c(2.5, 20, 20)) +
+  labs(caption = "* centered and scaled")
+p_comb
+ggsave("../figures/pson_motil-overview_all.png")
+```
+
+#### Distributions
+
+```{r}
+pson_motil_tidy_df %>% 
+  # sample_n(100) %>% 
+  # gather(sample, tpm, -gene_id) %>% 
+  # mutate(log_tpm = log(tpm + 1)) %>% 
+  # gather(transform, expression, -sample, -gene_id) %>% 
+  ggplot(aes(x = average_value)) +
+  stat_density(aes(colour = cellLine),
+               geom = "line", position = "identity") +
+  scale_color_brewer(palette = "Reds") +
+  facet_wrap(~ summary_metric, scales = "free")
+```
+
+### Expression overview
+
+```{r}
+expr_filter_df <- pson_expr_tpm_df %>% 
+  gather(sample, tpm, -gene_id) %>% 
+  mutate(log_tpm = log(tpm + 1)) %>% 
+  group_by(gene_id) %>% 
+  summarize(n_expr = sum(log_tpm > 0), 
+            avg_expr = mean(log_tpm)) %>% 
+  ungroup() %>% 
+  mutate(rare = n_expr < max(n_expr) / 2,
+         low = avg_expr < 1,
+         rare_or_low = rare | low)
+
+expr_filter_df %>% 
+  ggplot(aes(x = n_expr, y = avg_expr)) +
+  geom_point(aes(colour = rare_or_low), alpha = 0.5) +
+  scale_color_colorblind()
+```
+
+```{r}
+pson_expr_logtpm_df <- pson_expr_tpm_df %>% 
+  left_join(expr_filter_df %>% 
+              filter(!rare_or_low) %>% 
+              select(gene_id),
+            ., by = "gene_id") %>% 
+  mutate_if(is.numeric, ~ log(. + 1))
+```
+
+
+```{r}
+pson_expr_logtpm_df %>% 
+  sample_n(100) %>% 
+  gather(sample, logtpm, -gene_id) %>% 
+  ggplot(aes(x = logtpm)) +
+  stat_density(aes(group = gene_id), 
+               geom = "line", position = "identity", alpha = 0.2)
+```
+
+## Motility-expression correlation
+
+### Across all cell lines
+
+```{r}
+# build master dataframe for inspecting expression ~ motility trends
+pson_expr_motil_df <- pson_expr_logtpm_df %>% 
+  gather(sample, logtpm, -gene_id) %>% 
+  left_join(
+    pson_motil_tidy_df %>% 
+      filter(!(summary_metric %in% "end_to_end_distance_um")) %>%
+      select(sample, cellLine, experimentalCondition, 
+             summary_metric, average_value_scaled),
+    by = c("sample")
+  ) %>% 
+  filter(!is.na(experimentalCondition)) %>% 
+  select(gene_id, logtpm, summary_metric, average_value_scaled,
+         cellLine, experimentalCondition) %>%
+  group_by(gene_id, summary_metric) %>%
+  nest() %>%
+  ungroup()
+```
+
+
+```{r}
+# compute correlation across cell lines and conditions for all genes
+expr_motil_corr_df <- pson_expr_motil_df %>% 
+  mutate(
+    pearson = map_dbl(
+      data, 
+      ~ cor(.$logtpm, .$average_value_scaled, 
+            use = "pairwise.complete.obs", method = "pearson")
+    ),
+    spearman = map_dbl(
+      data, 
+      ~ cor(.$logtpm, .$average_value_scaled, 
+            use = "pairwise.complete.obs", method = "spearman")
+    )
+  ) %>% 
+  select(-data)
+```
+
+```{r, message=FALSE}
+expr_motil_top_corr_df <- expr_motil_corr_df %>% 
+  gather(corr_type, corr, pearson, spearman) %>% 
+  group_by(summary_metric, corr_type) %>% 
+  nest() %>% 
+  mutate(
+    top_corr = map(data, ~ bind_rows(top_n(., 10), top_n(., -10)))
+  ) %>% 
+  select(-data) %>% 
+  unnest(top_corr) %>% 
+  left_join(select(annotables::grch38, gene_id = ensgene, gene_name = symbol))
+```
+
+```{r}
+expr_motil_top_corr_df %>% 
+  mutate(neg = corr < 0) %>% 
+  arrange(corr) %>% 
+  ggplot(aes(x = corr_type, y = corr)) +
+  geom_point(aes(colour = corr)) +
+  ggrepel::geom_text_repel(aes(label = gene_name), size = 2.5) +
+  xlab("") +
+  scale_colour_distiller(palette = "PuOr") +
+  guides(colour = FALSE) +
+  facet_grid(neg ~ summary_metric, scales = "free_y") +
+  theme(strip.text.y = element_blank()) +
+  labs(title = "Genes most positively and negatively correlated with motility",
+       subtitle = "(across all cell lines)")
+ggsave("../figures/pson_expr-motil_corr-genes_all.png")
+```
+
+### Across breast cancer cell lines
+
+```{r}
+# build master dataframe for inspecting expression ~ motility trends
+brca_expr_motil_df <- pson_expr_logtpm_df %>% 
+  gather(sample, logtpm, -gene_id) %>% 
+  left_join(
+    pson_motil_tidy_df %>% 
+      filter(!(summary_metric %in% "end_to_end_distance_um")) %>%
+      select(sample, cellLine, experimentalCondition, diagnosis,
+             summary_metric, average_value_scaled),
+    by = c("sample")
+  ) %>% 
+  filter(!is.na(experimentalCondition), diagnosis == "Breast Cancer") %>% 
+  select(gene_id, logtpm, summary_metric, average_value_scaled,
+         cellLine, experimentalCondition) %>%
+  group_by(gene_id, summary_metric) %>%
+  nest() %>%
+  ungroup()
+```
+
+
+```{r}
+# compute correlation across cell lines and conditions for all genes
+brca_expr_motil_corr_df <- brca_expr_motil_df %>% 
+  mutate(
+    pearson = map_dbl(
+      data, 
+      ~ cor(.$logtpm, .$average_value_scaled, 
+            use = "pairwise.complete.obs", method = "pearson")
+    ),
+    spearman = map_dbl(
+      data, 
+      ~ cor(.$logtpm, .$average_value_scaled, 
+            use = "pairwise.complete.obs", method = "spearman")
+    )
+  ) %>% 
+  select(-data)
+```
+
+```{r, message=FALSE}
+brca_expr_motil_top_corr_df <- brca_expr_motil_corr_df %>% 
+  gather(corr_type, corr, pearson, spearman) %>% 
+  group_by(summary_metric, corr_type) %>% 
+  nest() %>% 
+  mutate(
+    top_corr = map(data, ~ bind_rows(top_n(., 10), top_n(., -10)))
+  ) %>% 
+  select(-data) %>% 
+  unnest(top_corr) %>% 
+  left_join(select(annotables::grch38, gene_id = ensgene, gene_name = symbol))
+```
+
+```{r}
+brca_expr_motil_top_corr_df %>% 
+  mutate(neg = corr < 0) %>% 
+  arrange(corr) %>% 
+  ggplot(aes(x = corr_type, y = corr)) +
+  geom_point(aes(colour = corr)) +
+  ggrepel::geom_text_repel(aes(label = gene_name), size = 2.5) +
+  xlab("") +
+  scale_colour_distiller(palette = "PuOr") +
+  guides(colour = FALSE) +
+  facet_grid(neg ~ summary_metric, scales = "free_y") +
+  theme(strip.text.y = element_blank()) +
+  labs(title = "Genes most positively and negatively correlated with motility",
+       subtitle = "(across breast cancer cell lines)")
+ggsave("../figures/pson_expr-motil_corr-genes_brca.png")
+```
