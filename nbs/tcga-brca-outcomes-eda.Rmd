@@ -1,0 +1,108 @@
+---
+title: "TCGA BRCA Data Exploration"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(synapser)
+library(GenomicDataCommons)
+library(stringr)
+library(janitor)
+library(ggthemes)
+library(patchwork)
+library(ggalluvial)
+library(forcats)
+library(kableExtra)
+```
+
+## Data collection
+
+### Clinical data
+
+```{r}
+# load TCGA PanCanAtlas manifest for GDC
+manifest_df <- read_tsv("../data/PanCan-General_Open_GDC-Manifest_0.txt")
+```
+
+```{r, warning=FALSE}
+tcga_cdr_clinical_file <- manifest_df %>% 
+  dplyr::filter(filename == "TCGA-CDR-SupplementalTableS1.xlsx") %>% 
+  pluck("id") %>% 
+  gdcdata(destination_dir = "../data/")
+
+brca_cdr_clinical_df <- readxl::read_excel(tcga_cdr_clinical_file) %>% 
+    dplyr::filter(type == "BRCA")
+
+sparse_vars <- brca_cdr_clinical_df %>%
+  summarise_all(.funs = funs(sum(str_detect(., "^\\[Not A.*") | is.na(.)))) %>% 
+  gather(variable, n_uninformative) %>% 
+  dplyr::filter(n_uninformative > (nrow(brca_cdr_clinical_df) * 0.25)) %>% 
+  pluck("variable")
+
+brca_cdr_clinical_df <- dplyr::select(brca_cdr_clinical_df, -one_of(sparse_vars))
+```
+
+```{r, warning=FALSE}
+tcga_clinical_file <- manifest_df %>% 
+  dplyr::filter(filename == "clinical_PANCAN_patient_with_followup.tsv") %>% 
+  pluck("id") %>% 
+  gdcdata(destination_dir = "../data/")
+
+brca_clinical_df <- read_tsv(tcga_clinical_file) %>% 
+  dplyr::filter(acronym == "BRCA")
+
+sparse_vars <- brca_clinical_df %>%
+  summarise_all(.funs = funs(sum(str_detect(., "^\\[Not A.*") | is.na(.)))) %>% 
+  gather(variable, n_uninformative) %>% 
+  dplyr::filter(n_uninformative > (nrow(brca_clinical_df) * 0.25)) %>% 
+  pluck("variable")
+
+brca_clinical_df <- dplyr::select(brca_clinical_df, -one_of(sparse_vars))
+```
+
+### Expression data
+
+```{r}
+
+```
+
+## Data formatting
+
+## Exploratory data analysis
+
+```{r}
+brca_clinical_df %>% 
+  filter_at(.vars = vars(matches("pathologic_[M|N]")), 
+            .vars_predicate = all_vars(!str_detect(., "X"))) %>%
+  mutate(path_tmn_n = if_else(str_detect(pathologic_N, "N0"), "N0", "non-N0"),
+         path_tmn_m = if_else(str_detect(pathologic_M, "M0"), "M0", "non-M0")) %>% 
+  dplyr::select(path_tmn_n, path_tmn_m) %>%
+  group_by(path_tmn_n, path_tmn_m) %>%
+  tally() %>%
+  ungroup() %>%
+  rownames_to_column("alluvium") %>% 
+  gather(tmn_category, tmn_stage, path_tmn_n, path_tmn_m) %>%
+  mutate(
+    tmn_group = if_else(str_detect(tmn_stage, "non"), "non-0", "0"),
+    tmn_category = fct_inorder(tmn_category)
+  ) %>%
+  ggplot(aes(x = tmn_category, stratum = tmn_stage, alluvium = alluvium, weight = n,
+             fill = tmn_group, label = tmn_stage)) +
+  geom_flow(colour = "black", width = 1/5) +
+  geom_stratum(alpha = 0.5, width = 1/5) +
+  geom_label(aes(colour = tmn_group), stat = "stratum", size = 3) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_colorblind() + 
+  scale_colour_manual(values = c("white", "black")) +
+  guides(fill = FALSE, colour = FALSE) + 
+  theme_minimal()
+
+```
+
+```{r}
+
+```
+
