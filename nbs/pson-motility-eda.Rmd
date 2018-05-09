@@ -10,14 +10,25 @@ output:
 
 ## Summary
 
-(speed, total distance, and end-to-end distance) for cell lines across 7 experimental conditions
+Exploring the relationship bewteen
++ **motility** (speed, total distance, and end-to-end distance) across 7 experimental conditions; and
++ **expression** (TPM normalized RNA-seq read counts) across the same 7 experimental conditions
+for **9** cell lines.
 
 ### Key
 
-- `pson`:
-- `brca`:
-- `_motil`: ~ motility data 
-- `_expr`: ~ expression data
+Some abbreviations I use in variable names throughout.
+
+- `pson`: all relevant PS-ON cell lines
+- `brca`: breast cancer only
+- `motil`: motility
+- `diag`: diagnosis
+- `dist`: distance
+- `expr`: expression
+- `tpm`: transcripts per million
+- `logtpm`: log(TPM + 1)
+- `df`: dataframe
+- `mat`: matrix
 
 ---
 
