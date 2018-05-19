@@ -24,3 +24,20 @@
 + **`pson_motility_summary_df.RData`**
     + `pson_expr_summary_df`: [186 observations x 20 variables]: dataframe with sample info from `sample_map_df` plus motility summary data for 9 cell lines, 7 conditions, 3 motility summary metrics (should be 189 rows, but 3 data points missing)
 
+## TCGA Patient Data
+
+### Breast cancer only
+
++ **`tcga_brca_clinical_df.RData`** (and `tcga_brca_clinical_df.tsv`)
+    + `brca_clinical_df` [1083 observations (samples) x 45 variables]: sample info (clinical outcomes data) dataframe for TCGA breast cancer patients
++ **`tcga_brca_cdr_clinical_df.RData`** (and `tcga_brca_cdr_clinical_df.tsv`)
+    + `brca_cdr_ clinical_df` [1082 observations (samples) x 22 variables]: TCGA-Clinical Data Resource (CDR) based sample info (clinical outcomes data) dataframe for TCGA breast cancer patients
++ **`tcga_brca_expr_norm_df.RData`** (and `tcga_brca_expr_norm_df.tsv`)
+    + `brca_expr_norm_df` [18351 observations (genes) x 1084 variables (1083 samples + Ensembl `gene_id`)]: batch-corrected, normalized expression data for all genes in TCGA BRCA samples
++ **`tcga_brca_expr_gene_info.RData`** (and `tcga_brca_expr_gene_info.tsv`)
+    + `gene_df` [18351 observations (genes) x 5 variables (IDs and annotations)]: dataframe with basic info for all genes in the TCGA expression data (mapping based on GRCh37/hg19)
+    
+#### *Other data*
+
++ **`tcga_brca_expr_norm_mat.RData`**
+    + `brca_expr_norm_mat` [18351 rows x 1083 columns]: matrix with same data as `brca_expr_norm_df` (gene IDs as rownames) 
