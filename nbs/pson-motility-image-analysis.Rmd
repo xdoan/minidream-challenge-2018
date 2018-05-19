@@ -1,0 +1,152 @@
+---
+title: "PS-ON Cell Line Image PCA Example"
+output: html_notebook
+---
+
+## Setup
+
+Load packages, log into Synapse, etc.
+
+```{r}
+library(synapser)
+library(imager)
+library(tidyverse)
+library(broom)
+
+synLogin()
+```
+
+## Data collection
+
+Get Synapse IDs for TIFF images of the **MDA-MB-231** breast cancer cell line from the motility study (from a single plate in the "Hyaluronic Acid Fibronectin" condition).
+
+```{r}
+query <- stringr::str_glue("
+SELECT * FROM syn7747734 
+WHERE ( 
+  ( fileFormat = 'tif' ) AND 
+  ( study = 'Motility' ) AND 
+  ( diagnosis = 'Breast Cancer' ) AND 
+  ( cellLine = 'MDA-MB-231' ) AND 
+  ( experimentalCondition = 'Hyaluronic Acid Fibronectin' ) 
+  AND (name LIKE '%plate_1%001.tif')
+)
+                          ")
+query
+```
+
+```{r}
+pson_motil_img_meta_df <- synTableQuery(
+  query, includeRowIdAndRowVersion = FALSE
+) %>% 
+  as.data.frame()
+```
+
+Download and load image from the last time point.
+
+```{r}
+img_file <- pson_motil_img_meta_df %>% 
+  slice(n()) %>% 
+  pluck("id") %>% 
+  synGet(downloadLocation = "../data/")
+cell_img <- load.image(img_file$path)
+cell_img
+```
+
+## View cell image
+
+Here's what the image looks like, as downloaded.
+
+```{r}
+plot(cell_img)
+```
+
+If we save the file as a JPEG (with maximum quality), we can get a starting size.
+
+```{r}
+save.image(cell_img, "img.jpeg", quality = 1)
+fs::file_info("img.jpeg") %>% 
+  pluck("size")
+```
+
+## Image compression with PCA
+
+Convert the image to a matrix and compute principal components (PCs) with `prcomp`.
+
+```{r}
+cell_img_mat <- as.matrix(cell_img)
+cell_img_pca <- prcomp(cell_img_mat)
+```
+
+The number of PCs (not surprisingly) is equal to the dimensions of the original image.
+
+```{r}
+cell_img_pca_tidy <- tidy(cell_img_pca, matrix = "pcs") 
+nrow(cell_img_pca_tidy)
+```
+
+Let's check out the percent variance explained by the top 50 PCs.
+
+```{r}
+cell_img_pca_tidy %>% 
+  slice(1:50) %>%
+  ggplot(aes(x = PC, y = percent)) +
+  geom_col(alpha = 0.7)
+```
+
+A fair amount of variance in the image data is explained by PC1. I'll create a function to pick out the top **`num_pcs`** to create a compressed version of the image. Plotting the reconstructed image from PC1 only:
+
+```{r}
+compress_img <- function(img_pca, num_pcs) {
+  img_pca$x[, 1:num_pcs] %*% t(img_pca$rotation[, 1:num_pcs]) %>% 
+    t() %>% 
+    as.cimg()
+}
+compress_img(cell_img_pca, num_pcs = 1) %>% 
+  plot()
+```
+
+So, a certainly a hint of the original... What about using the top 10 PCs?
+
+```{r}
+compress_img(cell_img_pca, num_pcs = 10) %>% 
+  plot()
+```
+
+Approaching the compression a bit more systematically, I can figure out how many PCs would be needed to capture 75% of the variation (~information) in the image data.
+
+```{r}
+cell_img_pca_tidy %>% 
+  ggplot(aes(x = PC, y = cumulative)) +
+  geom_col(alpha = 0.7) +
+  geom_vline(aes(xintercept = max(PC[cumulative <= 0.75])),
+             linetype = 2, size = 1, colour = "blue3")
+```
+
+```{r}
+pcs_75 <- cell_img_pca_tidy %>% 
+    filter(cumulative <= .75) %>%
+    top_n(1, PC) %>%  
+    pluck("PC")
+pcs_75
+```
+
+That's only **`r pcs_75`** PCs (out of `r nrow(cell_img_pca_tidy)`) to reconstruct a fairly accurate version of the image!
+
+```{r}
+compress_img(cell_img_pca, num_pcs = pcs_75) %>% 
+  plot()
+```
+
+I can now save the compressed image as a JPEG to see the resulting file size.
+
+```{r}
+cell_img_compressed <- compress_img(cell_img_pca, num_pcs = pcs_75)
+
+save.image(cell_img_compressed, "img_compressed.jpeg", quality = 1)
+fs::file_info("img_compressed.jpeg") %>% 
+  pluck("size")
+```
+
+That's about 60% of the original file size. Success!
+
