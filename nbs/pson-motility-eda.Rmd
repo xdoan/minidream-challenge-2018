@@ -72,7 +72,6 @@ All data was retrievied from the [**PS-ON Cell Line Characterization Portal**](h
 
 I'll first grab basic "sample" info for cell lines from the [**Proteomics and RNA** Synapse table](https://www.synapse.org/#!Synapse:syn10320914/tables/), for all files containing RSEM gene quantification outputs.
 
-
 ```{r}
 # collect "sample" metadata for cell lines with expression data available 
 prot_rna_meta_fv_id <- "syn10320914"
@@ -135,6 +134,15 @@ sample_tidy_df
 
 Next, for all the samples in `sample_tidy_df`, I'll download the file corresponding to the Synapse ID, extract `TPM` values, and combine everything into a single dataframe. Even though I'll do some additional transformation and filtering with the expression data below, I'll go ahead and save the full dataframe as `"pson_expr_tpm_df.RData"`.
 
+**Note:** I'll use the `annotables` package to augment the Ensembl gene IDs with some additional field to provide more context: 
+
++ `entrez`: NCBI Entrez gene ID
++ `symbol`: HGNC gene symbol
++ `biotype`: Protein coding, pseudogene, mitochondrial tRNA, etc.
++ `description`: Full gene name/description
+
+I'll save this dataframe as `"pson_expr_gene_df.RData"`.
+
 ```{r, message=FALSE}
 # extract expression data from individual files
 extract_expr_tpm <- function(syn_id) {
@@ -157,9 +165,31 @@ if (!fs::file_exists(pson_expr_tpm_file)) {
     map_df(extract_expr_tpm, .id = "id") %>% 
     spread(id, TPM) %>% 
     rename(!!!sample_id_map)
+  
+  # update/augment gene identifiers; subset to protein coding genes ; 
+  # remove duplicate IDs
+  gene_df <- pson_expr_tpm_df %>% 
+    select(gene_id) %>% 
+    left_join(grch37, by = c("gene_id" = "ensgene")) %>% 
+    filter(biotype == "protein_coding") %>% 
+    select(gene_id, entrez, symbol, biotype, description) %>% 
+    filter(!duplicated(entrez) & !duplicated(gene_id))
+
+  # make sure gene info lines up with expression data
+  pson_expr_tpm_df <- pson_expr_tpm_df %>% 
+    left_join(select(gene_df, gene_id), ., by = "gene_id")
+  
   save(pson_expr_tpm_df, file = pson_expr_tpm_file)
+  # also save TSV
+  write_tsv(pson_expr_tpm_df, 
+            path = str_replace(pson_expr_tpm_file, "RData", "tsv"))
+  
+  save(gene_df, file = "../data/pson_expr_gene_info.RData")
+  # also save TSV
+  write_tsv(gene_df, path = "../data/pson_expr_gene_info.tsv")
 } else {
   load(pson_expr_tpm_file)
+  load("../data/pson_expr_gene_info.RData")
 }
 ```
 
@@ -169,6 +199,11 @@ Columns of the `pson_expr_tpm_df` dataframe correspond to `sample` observations 
 head(pson_expr_tpm_df)
 ```
 
+Taking a look at the first few rows of `gene_df`:
+
+```{r}
+head(gene_df)
+```
 
 ### Motility data
 
@@ -216,7 +251,12 @@ diagnosis_colors <- sample_map_df %>%
   mutate(color = ggthemes::tableau_color_pal("colorblind10")(nrow(.))) %>% 
   deframe()
 
-save(sample_map_df, file = "../data/pson_sample_map_and_colors.RData")
+save(sample_map_df, diagnosis_colors,
+     file = "../data/pson_sample_map_and_colors.RData")
+# also save TSV
+write_tsv(sample_map_df, path = "../data/pson_sample_map_df.tsv")
+write_tsv(enframe(diagnosis_colors), 
+          path = "../data/pson_diagnosis_colors_df.tsv")
 ```
 
 Here's what the final sample info dataframe looks like:
@@ -271,6 +311,9 @@ if (!fs::file_exists(pson_motil_summary_file)) {
       by = "id_motil"
     )
   save(pson_motil_summary_df, file = pson_motil_summary_file)
+  # also save TSV
+  write_tsv(pson_motil_summary_df, 
+            path = str_replace(pson_motil_summary_file, "RData", "tsv"))
 } else {
   load(pson_motil_summary_file)
 }
@@ -300,30 +343,6 @@ if (!fs::file_exists(pson_expr_tpm_mat_file)) {
 }
 ```
 
-#### Create and save gene info dataframe
-
-I'll use the `annotables` package to augment the Ensembl gene IDs with some additional field to provide more context: 
-
-+ `entrez`: NCBI Entrez gene ID
-+ `symbol`: HGNC gene symbol
-+ `biotype`: Protein coding, pseudogene, mitochondrial tRNA, etc.
-+ `description`: Full gene name/description
-
-I'll save this dataframe as `"pson_expr_gene_df.RData"`.
-
-```{r}
-gene_df <- pson_expr_tpm_df %>% 
-  select(gene_id) %>% 
-  left_join(grch38, by = c("gene_id" = "ensgene")) %>% 
-  select(gene_id, entrez, symbol, biotype, description)
-save(gene_df, file = "../data/pson_expr_gene_info.RData")
-```
-
-Taking a look at the first few rows of `gene_df`:
-
-```{r}
-head(gene_df)
-```
 
 ### Motility data 
 
@@ -340,6 +359,9 @@ if (!fs::file_exists(pson_motil_tidy_file)) {
     mutate(average_value_scaled = scale_this(average_value)) %>%
     ungroup()
   save(pson_motil_tidy_df, file = pson_motil_tidy_file)
+  # also save TSV
+  write_tsv(pson_motil_tidy_df, 
+            path = str_replace(pson_motil_tidy_file, "RData", "tsv"))
 } else {
   load(pson_motil_tidy_file)
 }
@@ -547,7 +569,6 @@ pson_motil_tidy_df %>%
   guides(colour = FALSE) +
   facet_grid(summary_metric ~ diagnosis, scales = "free") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8))
-?geom_label_repel
 ```
 
 #### Distributions
@@ -566,7 +587,7 @@ pson_motil_tidy_df %>%
 
 ### Expression overview
 
-Before analyzing the expression data, I'd like to apply some basic transformations: log-normalizing the TPM expression values and removing/filtering low, rarely, or "flatly" (~ low variance) expressed genes. 
+Before analyzing the expression data, I'd like to apply some basic transformations: log-normalizing the TPM expression values and removing/filtering low or rarely expressed genes. 
 
 ```{r}
 expr_filter_df <- pson_expr_tpm_df %>% 
@@ -580,12 +601,11 @@ expr_filter_df <- pson_expr_tpm_df %>%
   ungroup() %>% 
   mutate(rare = n_expr < max(n_expr) / 2,
          low = avg_expr < 1,
-         flat = cv_expr < 1,
-         rare_or_low_or_flat = rare | low | flat)
+         rare_or_low = rare | low)
 
 expr_filter_df %>% 
   ggplot(aes(x = n_expr, y = avg_expr)) +
-  geom_point(aes(colour = rare_or_low_or_flat), alpha = 0.5) +
+  geom_point(aes(colour = rare_or_low), alpha = 0.5) +
   scale_color_colorblind()
 ```
 
@@ -603,11 +623,9 @@ log_and_filter_genes <- function(expr_tpm_melted_df) {
     ungroup() %>% 
     mutate(rare = n_expr < max(n_expr) / 2,
            low = avg_expr < 1,
-           flat = cv_expr < 1,
-           rare_or_low_or_flat = rare | low | flat) %>% 
-    filter(!rare_or_low_or_flat) %>% 
+           rare_or_low = rare | low) %>% 
+    filter(!rare_or_low) %>% 
     pluck("gene_id")
-    
     
     expr_tpm_melted_df %>% 
       filter(gene_id %in% keep_genes) %>% 
@@ -743,6 +761,11 @@ expr_motil_corr_all_df <- calc_genewise_corr(pson_expr_motil_df)
 
 Ideally, I'd like to find genes that are significantly correlated with motility after correcting for multiple hypothesis testing (i.e., Benjamini-Hochberg). Filtering for genes with adjusted p-value < 0.05, I get...
 
+```{r}
+expr_motil_corr_all_df
+```
+
+
 ```{r, message=FALSE}
 expr_motil_corr_all_sig_df <- expr_motil_corr_all_df %>% 
   filter_at(.vars = vars(matches(".*_p.value_adj")),
@@ -763,24 +786,26 @@ expr_motil_corr_all_sig_df <- expr_motil_corr_all_df %>%
 expr_motil_corr_all_sig_df
 ```
 
-With this view, we get `r n_distinct(expr_motil_corr_all_sig_df$gene_id)` genes that are correlated with *either* speed or distance based on *either* Pearson or Spearman correlation. Taking a look at these genes:
+With this view, we still get `r n_distinct(expr_motil_corr_all_sig_df$gene_id)` genes that are correlated with *either* speed or distance based on *either* Pearson or Spearman correlation. Taking a look at these genes:
 
 ```{r}
 expr_motil_corr_all_sig_df %>% 
-  mutate(neg = corr < 0,
-         gene_name = if_else(is.na(gene_name), gene_id, gene_name)) %>% 
-  arrange(corr) %>% 
-  ggplot(aes(x = corr_type, y = corr)) +
-  geom_point(aes(fill = corr), shape = 21, colour = "slategray", size = 3) +
-  geom_text_repel(aes(label = gene_name), size = 3) +
-  xlab("") +
+  ggplot(aes(x = gene_name, y = corr_type)) +
+  geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
   scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
-  facet_grid(neg ~ summary_metric, scales = "free_y") +
-  theme(strip.text.y = element_blank()) +
+  ylab("") +
+  xlab("") +
+  facet_grid( ~ summary_metric, 
+             scales = "free_x", space = "free_x", drop = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        legend.position = "top",
+        strip.text.y = element_text(angle = 0, size = 6)) +
   labs(title = "Genes significantly* correlated with motility",
-       subtitle = "(across all cell lines and cancer types)",
+       subtitle = "(across all cell lines within each cancer type)",
        caption = "* p-value < 0.05 (not adjusted for multiple testing)")
 ```
+
 
 ### For each cancer type
 
@@ -816,6 +841,7 @@ grid::grid.newpage()
 grid::grid.draw(p2)
 ```
 
+
 ```{r, warning=FALSE}
 # compute correlation across cell lines and conditions for all genes and all
 # cancer types
@@ -835,18 +861,7 @@ expr_motil_corr_diag_sig_df <- expr_motil_corr_diag_df %>%
 expr_motil_corr_diag_sig_df
 ```
 
-An impressive `r n_distinct(expr_motil_corr_diag_sig_df$gene_id)` gene(s) correlated with *either* speed or distance based on *either* Pearson or Spearman correlation within ***any*** cancer type. Nobody likes multiple testing correction anyway — let's skip it.
-
-```{r, message=FALSE}
-expr_motil_corr_diag_sig_df <- expr_motil_corr_diag_df %>% 
-  filter_at(.vars = vars(matches(".*_p.value")),
-            .vars_predicate = any_vars(. < 0.01)) %>% 
-  select(gene_id, summary_metric, diagnosis,
-         pearson = pearson_estimate, spearman = spearman_estimate) %>% 
-  gather(corr_type, corr, pearson, spearman) %>% 
-  left_join(select(gene_df, gene_name = symbol, everything()), by = "gene_id")
-expr_motil_corr_diag_sig_df
-```
+An impressive `r n_distinct(expr_motil_corr_diag_sig_df$gene_id)` gene(s) correlated with *either* speed or distance based on *either* Pearson or Spearman correlation within ***any*** cancer type. 
 
 ```{r}
 expr_motil_corr_diag_sig_df %>% 
@@ -863,18 +878,18 @@ expr_motil_corr_diag_sig_df %>%
         strip.text.y = element_text(angle = 0, size = 6)) +
   labs(title = "Genes significantly* correlated with motility",
        subtitle = "(across all cell lines within each cancer type)",
-       caption = "* p-value < 0.01 (not adjusted for multiple testing)")
+       caption = "* BH-adjusted p-value < 0.05")
 ```
 
 #### Across breast cancer cell lines
 
-These are the same results as above, but focusing in on the genes that appear to be correlated with motility across breast cancer cell lines.
+These are the same results as above, but focusing in on the genes that appear to be correlated with motility across breast cancer cell lines (and not correcting for multiple testing).
 
 ```{r}
 expr_motil_corr_diag_brca_sig_df <- expr_motil_corr_diag_df %>% 
   filter(diagnosis == "Breast Cancer") %>% 
   filter_at(.vars = vars(matches(".*_p.value")),
-            .vars_predicate = any_vars(. < 0.05)) %>% 
+            .vars_predicate = any_vars(. < 0.01)) %>% 
   select(gene_id, summary_metric, diagnosis,
          pearson = pearson_estimate, spearman = spearman_estimate) %>%
   gather(corr_type, corr, pearson, spearman) %>%
@@ -884,23 +899,51 @@ expr_motil_corr_diag_brca_sig_df
 
 ```{r}
 expr_motil_corr_diag_brca_sig_df %>% 
-  mutate(neg = corr < 0,
-         gene_name = if_else(is.na(gene_name), gene_id, gene_name)) %>% 
-  arrange(corr) %>% 
-  ggplot(aes(x = corr_type, y = corr)) +
-  geom_point(aes(fill = corr), shape = 21, colour = "slategray", size = 3) +
-  geom_text_repel(aes(label = gene_name), size = 3) +
-  xlab("") +
+  ggplot(aes(x = gene_name, y = corr_type)) +
+  geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
   scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
-  facet_grid(neg ~ summary_metric, scales = "free_y") +
-  theme(strip.text.y = element_blank()) +
+  ylab("") +
+  xlab("") +
+  facet_grid(diagnosis ~ summary_metric, 
+             scales = "free_x", space = "free_x", drop = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        legend.position = "top",
+        strip.text.y = element_text(angle = 0, size = 6)) +
   labs(title = "Genes significantly* correlated with motility",
        subtitle = "(across all breast cancer cell lines)",
-       caption = "* p-value < 0.05 (not adjusted for multiple testing)")
+       caption = "* p-value < 0.01 (not adjusted for multiple testing)")
 ```
 
-
 ### For each breast cancer cell line
+
+#### Save data for breast cancer cell lines only
+
+While we're here... I'll create some new files with just the motility and expression data for breast cancer cell lines in the PS-ON portal.
+
+```{r}
+brca_sample_map_df <- sample_map_df %>%
+  filter(diagnosis == "Breast Cancer")
+brca_motil_tidy_df <- pson_motil_tidy_df %>% 
+  filter(diagnosis == "Breast Cancer")
+brca_expr_tpm_df <- pson_expr_tpm_df %>% 
+  select(gene_id, one_of(brca_sample_map_df$sample))
+brca_expr_tpm_mat <- brca_expr_tpm_df %>% 
+    column_to_rownames("gene_id") %>% 
+    as.matrix()
+
+save(brca_sample_map_df, file = "../data/pson_brca_sample_map_df.RData")
+write_tsv(brca_sample_map_df, "../datapson_brca_sample_map_df.tsv")
+
+save(brca_motil_tidy_df, file = "../data/pson_brca_motility_tidy_df.RData")
+write_tsv(brca_motil_tidy_df, "../data/pson_brca_motility_tidy_df.tsv")
+
+save(brca_expr_tpm_df, file = "../data/pson_brca_expr_tpm_df.RData")
+write_tsv(brca_expr_tpm_df, "../data/pson_brca_expr_tpm_df.tsv")
+
+save(brca_expr_tpm_mat, file = "../data/pson_brca_expr_tpm_mat.RData")
+```
+
 
 Taking a slightly more granular approach, I'll look at gene-motility correlation across cell lines for each cancer type.
 
@@ -954,12 +997,12 @@ brca_expr_motil_corr_cellline_sig_df <- brca_expr_motil_corr_cellline_df %>%
 brca_expr_motil_corr_cellline_sig_df
 ```
 
-Nope. Relaxing the threshold a bit further now (unadjusted p-value < 0.05):
+Not much. Relaxing the threshold a bit further now (unadjusted p-value < 0.05):
 
 ```{r}
 brca_expr_motil_corr_cellline_sig_df <- brca_expr_motil_corr_cellline_df %>% 
   filter_at(.vars = vars(matches(".*_p.value")),
-            .vars_predicate = any_vars(. < 0.05)) %>% 
+            .vars_predicate = any_vars(. < 0.001)) %>% 
   select(gene_id, summary_metric, cellLine,
          pearson = pearson_estimate, spearman = spearman_estimate) %>%
   gather(corr_type, corr, pearson, spearman) %>%
@@ -969,26 +1012,23 @@ brca_expr_motil_corr_cellline_sig_df
 
 ```{r}
 brca_expr_motil_corr_cellline_sig_df %>% 
-  mutate(neg = corr < 0,
-         gene_name = if_else(is.na(gene_name), gene_id, gene_name)) %>% 
   ggplot(aes(x = gene_name, y = corr_type)) +
   geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
   scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
-  xlab("") +
   ylab("") +
+  xlab("") +
   facet_grid(cellLine ~ summary_metric, 
              scales = "free_x", space = "free_x", drop = TRUE) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8),
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
         axis.text.y = element_text(size = 7),
         legend.position = "top",
         strip.text.y = element_text(angle = 0, size = 6)) +
   labs(title = "Genes significantly* correlated with motility",
        subtitle = "(for each breast cancer cell line)",
-       caption = "* p-value < 0.05 (not adjusted for multiple testing)")
-
+       caption = "* p-value < 0.001 (not adjusted for multiple testing)")
 ```
 
-Not much to see, but maybe these genes mean more to others.
+Notably, not much overlap (and in some cases contrasting patterns) between the two cell lines.
 
 ---
 
