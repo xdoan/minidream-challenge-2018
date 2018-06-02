@@ -36,3 +36,4 @@ vignettes/*.pdf
 # Local data
 .DS_Store
 figures
+raw
