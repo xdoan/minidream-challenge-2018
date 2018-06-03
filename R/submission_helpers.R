@@ -34,6 +34,9 @@ create_module1_submission <- function() {
 }
 
 submit_module_answers <- function(module) {
+  if (is.numeric(module)) {
+    module <- as.character(module)
+  }
   submission_filename <- switch(
     module,
     "0" = create_module0_submission(),    
