@@ -1,5 +1,19 @@
 library(yaml)
 
+create_module0_submission <- function() {
+  submission_filename <- paste(Sys.getenv("USER"), "activity-0.yml", sep = "_")
+  
+  bday <<- my_bday_guess
+  age <<- my_age_guess
+
+  answers <- list(
+    bday = bday, 
+    age = age 
+  )
+  write_yaml(answers, submission_filename)
+  submission_filename
+}
+
 create_module1_submission <- function() {
   submission_filename <- paste(Sys.getenv("USER"), "activity-1.yml", sep = "_")
   
@@ -9,18 +23,20 @@ create_module1_submission <- function() {
   rationale <<- my_rationale
   
   answers <- list(
-    gene = my_gene, 
-    delta = my_delta, 
-    description = my_description, 
-    rationale = my_rationale
+    gene = gene, 
+    delta = delta, 
+    description = description, 
+    rationale = rationale
   )
-  print(answers)
-  # write_yaml(answers, submission_filename)
+
+  write_yaml(answers, submission_filename)
   submission_filename
 }
 
 submit_module_answers <- function(module) {
-  submission_filename <- switch(module,
+  submission_filename <- switch(
+    module,
+    "0" = create_module0_submission(),    
     "1" = create_module1_submission()
   )
   # activity_submission <- synStore(
