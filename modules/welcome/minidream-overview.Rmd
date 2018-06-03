@@ -20,7 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
 - To complement your research projects with the **CSBC/PS-ON Summer Research Program**...
 
 - Our goals for this mini-DREAM Challenge are to:
-    - Introduce you to **data science** and **basic model building**
+    - Introduce you to **data analysis** and **basic model building**
     - Educate you on **cancer** and some specific biology related to breast cancer
     - Guide you through realistic analysis activities to solve common problems
 
@@ -48,7 +48,7 @@ knitr::include_graphics("img/dream-logo.png")
 
 ## CSBC mini-DREAM Challenge
 
-- Same data and questions as original Breast Cancer Prognosis DREAM Challenge
+- Similar question as original Breast Cancer Prognosis DREAM Challenge, but focused on characterizing **metastasis**
 
 - ***You*** will work with the data and step through the process of building predictive models for cancer survival
 
