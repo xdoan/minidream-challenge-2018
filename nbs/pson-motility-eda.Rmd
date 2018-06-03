@@ -933,7 +933,7 @@ brca_expr_tpm_mat <- brca_expr_tpm_df %>%
     as.matrix()
 
 save(brca_sample_map_df, file = "../data/pson_brca_sample_map_df.RData")
-write_tsv(brca_sample_map_df, "../datapson_brca_sample_map_df.tsv")
+write_tsv(brca_sample_map_df, "../data/pson_brca_sample_map_df.tsv")
 
 save(brca_motil_tidy_df, file = "../data/pson_brca_motility_tidy_df.RData")
 write_tsv(brca_motil_tidy_df, "../data/pson_brca_motility_tidy_df.tsv")

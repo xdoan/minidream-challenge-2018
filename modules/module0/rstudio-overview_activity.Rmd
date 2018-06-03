@@ -1,0 +1,109 @@
+---
+title: "RStudio orientation"
+author: "James Eddy"
+date: '`r lubridate::today()`'
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# About this activity
+
+All you need to do here is read along and follow the instructions. The goal is to introduce you to R Markdown and show you how you'll be using R Notebooks to work through other modules in the mini-DREAM Challenge. This activity isn't really about the R code itself (which we'll start to cover in **Module 1**), but to give you a feel for running R code within notebooks.
+
+## R Markdown
+
+Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. **R Markdown** is a specific version of this syntax that allows you to combine text and R code in a single document.
+
+With R Markdown, you can write attractive reports that include R output. You write the reports in a markdown document, inserting R code in "chunks" where you like it. R then generates or "knits" a final document that replaces the R code with its results.
+
+To learn more about R Markdown, visit [rmarkdown.rstudio.com](http://rmarkdown.rstudio.com/). The site provides a quick tour of the R markdown syntax, as well as in depth articles and examples. Alternatively, you can take RStudio’s online course [“Reporting with R Markdown”](https://www.datacamp.com/courses/reporting-with-r-markdown) to get up to speed fast.
+
+---
+
+# R Notebooks
+
+You're currently working inside an [R Markdown](http://rmarkdown.rstudio.com) Notebook (or, if you're viewing this in a web browser, the *knitted* output version of the notebook). When you execute **chunks** of code within the notebook, the results appear beneath the code. 
+
+## Running chunks with the click of a button
+
+Try executing this chunk by clicking the *Run* button (green arrow) within the chunk. 
+
+```{r}
+print("Hello world!")
+```
+
+You should see a line of output text that looks like `[1] "Hello world!"`.
+
+## Running chunks with a keyboard shortcut
+
+Run this next chunk by placing your cursor inside it and pressing *Cmd+Shift+Enter* (if you're working on a Windows computer, use *Ctrl+Shift+Enter* instead).
+
+```{r}
+data(cars)
+plot(cars)
+```
+
+You should see a scatterplot of points for distance values (`dist`) versus `speed`.
+
+## Table outputs in R Notebooks
+
+One last feature that's worth mentioning: R Notebooks have a pretty handy way of displaying information in tables known as **data frames**. Basically, instead of trying to dump an entire table on the screen at once, the notebook interface will split things into rows of 10 and however many columns fit on the screen. You can scroll through rows by clicking on the **'Previous'** or **'Next'** buttons (or any of the individual page numbers). To view other columns, click on the little white arrow at the top right corner of the table.
+
+```{r}
+load("../../data/pson_motility_tidy_df.RData")
+pson_motil_tidy_df
+```
+
+**Spoiler alert:** the information in the table above describes various clinical features for patients in the PS-ON dataset that you'll be using in this course. You don't need to worry about what any of this data means yet.
+
+## Multiple outputs
+
+Occasionally, you'll see more than one output from the same code chunk. These will show up as thumbnail images in the R Notebook, and you can click on each to see the specific result.
+
+```{r}
+print("To the right are the first and last 6 rows of the table.")
+head(pson_motil_tidy_df)
+tail(pson_motil_tidy_df)
+```
+
+---
+
+# R Notebooks in mini-DREAM activities
+
+Now that you've seen how to run code in an R Notebook chunk, you're ready to go for the rest of the course! For module activities, we'll have you follow along in notebooks and run (or "execute") code one chunk at a time. You'll occasionally be asked to modify some code within a chunk and see how that affects output. However, you won't need to create new R Notebooks from scratch.
+
+---
+
+# mini-DREAM Challenge  
+
+This is a small preview of the challenge exercises that we'll include at the end of each activity. You'll be prompted to write some code and submit an answer to the challenge question. Your submission will get "scored" (or at least checked), and the results will be reported within a few minutes.
+
+**QUESTION:** What's my (James) birthday?
+
+Enter your best guess of my birthday. For a bonus, you can guess my age too.
+
+```{r}
+# format your guess as 'MM/DD'
+my_bday_guess <- ""
+
+# just give a round number for this one
+my_age_guess <- 0
+```
+
+
+## Submitting the prediction
+
+You're now ready to submit the prediction. Just run the chunk below, a file with your prediction will be uploaded to Synapse and submitted to the challenge. You'll be able to see the results of your prediction on the mini-DREAM scoreboards, with the submission ID that gets printed below.
+
+```{r}
+library(synapser)
+synLogin(rememberMe = TRUE, silent = TRUE)
+submit_module_answers(module = 0)
+```
+
+Congrats — you've reached the end of **Module 0**! You can now return to the **mini-DREAM** Challenge site on Synapse. **Make sure to save your work before you leave!**
+
+

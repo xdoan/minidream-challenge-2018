@@ -1,0 +1,382 @@
+---
+title: "Working with genomics data"
+author: "Andrew Gentles"
+date: "June 12, 2018"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("../../R/submission_helpers.R")
+```
+
+# About this activity
+
+This module will introduce you to loading and manipulating gene expression data. We'll start with the **Physical Sciences in Oncology (PS-ON)** cell line dataset. This data comes from the [PS-ON Cell Line Characterization study](https://www.synapse.org/#!Synapse:syn7248578), which includes a variety of imaging and microscopy based characterizations of physical properties such as morphology and motility for ~30 cell lines from numerous tissue and tumor types. For many of these cell lines and experimental conditions, we also have corresponding genomic and proteomic measurements.
+
+> **READ THIS FIRST:** You've probably noticed that we haven't provided any sort of introduction to R. We could spend an entire summer teaching you the basics of programming in R, so it would be unreasonable to expect you to be self-sufficient in R after a single hour-long activity. Instead, we'll jump straight into **using** R for real tasks, and do our best to explain what's happening along the way. 
+> 
+> You don't really need to understand in great depth what all the code is doing. We want you to read through the notebook and run each chunk like you did in **Module 0**. Look at each output, and think about what's happening. Occasionally, we'll prompt you to fill in some code on your own before moving on to the next step. If you get stuck, ask us questions!!
+
+---
+
+# Loading & inspecting data
+
+Let's load some data and examine it a bit. We will mostly be loading the data from an R file format called `SOMETHING.Rdata`. These are binary files (i.e., not human readable) that can store multiple R objects (results) that you create in the process of an R analysis. Often you will load in a matrix or table of information using commands like `read.delim()`, but `.RData` files are smaller and faster to load.
+
+## Cell line gene expression data
+
+```{r}
+# this is a comment -- R will ignore any text following '#'
+load("../../data/pson_expr_tpm_df.RData")
+ls() # short for the word "list"
+```
+
+Anytime you see an R command in the form `keyword()`, that represents a function — this tells R to perform that function on whatever inputs are inside the parentheses. The `df` in `pson_expr_tpm_df` is short for "data frame," which is a table that can store different types of data (text, numbers, etc.) in each column. The `names()` command tells you the names of the columns in a data frame. 
+
+```{r}
+names(pson_expr_tpm_df)
+```
+
+The `str()` command is one of the most useful R commands — it tells you the *structure* of a variable or object in R. 
+
+```{r}
+str(pson_expr_tpm_df)
+```
+
+Another useful command is `head()`. This basically tells R to "cut the head off" of my table or matrix and only show me those rows. The default number of rows for `head()` is 6, but you can change this if you want. 
+
+```{r}
+head(pson_expr_tpm_df)
+```
+
+What do you think the `tail()` commmand does? Give it a try in the chunk below.
+
+```{r}
+# type your `tail()` command here, then run the chunk to see the result
+
+```
+
+Also, R has a convenient built in data viewer that displays a data frame similarly to in Excel (though you can't manipulate things). In RStudio, you can also click on the variable under the **Environment** tab in the upper right panel. **Note:** running the chunk below will open the viewer in a new tab; you can switch back to the `working-with-genomics-data_activity.Rmd` tab to resume the activity.
+
+```{r}
+View(pson_expr_tpm_df)
+```
+
+We can use *indexing* to examine the first 5 rows and 5 columns — here for the expression table. 
+
+```{r}
+# R interprets ':' as "to" — for example, `1:5` gives you a list of numbers
+# from 1 to 5:
+# > 1:5
+# [1] 1 2 3 4 5
+pson_expr_tpm_df[1:5, 1:5]
+```
+
+We saw how big the matrix was from the `str()` command, but can find it another way with the `dim()`, which returns two numbers indicating rows and columns. 
+
+```{r}
+dim(pson_expr_tpm_df)
+```
+
+Those gene IDs are not very informative — they come from a database called ENSEMBL. More commonly, we would use the Hugo gene symbols (https://www.genenames.org/). These are the gene names you are more used to seeing (MYC, BRCA1, etc). We have this information stored in another file.
+
+```{r}
+load("../../data/pson_expr_gene_info.RData")
+```
+
+Take a moment to look at the information you just downloaded. Does it have the same number of genes as the expression matrix? In the same order?
+
+```{r}
+# 1. Find data frame name using the `ls()` command 
+#    (hint: it's NOT `pson_expr_tpm_df`)
+
+# 2. View the new data frame using one of methods above
+
+# 3. Get the size of the data frame using one of methods above
+
+```
+
+In this case they are (thanks, James!) but in many cases there will be things missing, they'll be in the wrong order, etc. So we would have to merge these two data frames together. This can be done with the **`merge()`** command which is like a SQL database query command if you are familiar with those. For now let's only keep the rows from the expression table (`pson_expr_tpm_df`) corresponding to the rows from the table of gene information (`gene_df`) and put it in a new data frame called `pson_expr_tpm_df2`.
+
+```{r}
+pson_expr_tpm_df2 <- merge(x = gene_df, y = pson_expr_tpm_df, 
+                           by.x = "gene_id", by.y = "gene_id")
+pson_expr_tpm_df2[1:5, 1:9] # view a few more columns this time
+```
+
+What would have been the result of swapping the `gene_df` and `pson_expr_tpm_df`? Is it obvious how you would merge two frames based on a variable that is not called the same thing in both cases? 
+
+The `"biotype"` column is not very useful — they are all protein coding so let's ditch it:
+
+```{r}
+pson_expr_tpm_df2[, "entrez"] <- NULL
+pson_expr_tpm_df2[1:5, 1:9] # view a few more columns this time
+```
+
+Whoops — deleted the wrong column. This is why it's often good to create a new variable when manipulating/merging etc., so we can recover data if needed!
+
+Many things in R can work on a data frame, but often it's easier to have a simpler matrix
+
+```{r}
+pson_tpm_mat <- as.matrix(pson_expr_tpm_df2[, -c(1:4)]) 
+rownames(pson_tpm_mat) <- pson_expr_tpm_df2$symbol
+pson_tpm_mat[1:5, 1:5]
+```
+
+Less "pretty," but now it's easier to do many operations on the matrix. If you are familiar with Matlab, you'll know that this makes speeding up computation easier, but the wheels can fall off. R can digest different mixed data better using data frames. But that can be a double-edged sword because R will often produce a result even when you did something you didn't mean.
+
+There are some other minor differences in how we work with data frames and matrices. For example, we need to be a bit more explicit when checking column names of a matrix, using the `colnames()` function instead of just `names()`.
+
+```{r}
+colnames(pson_tpm_mat)
+```
+
+TPM stands for "Transcripts per Million." There are many ways of summarizing RNA-seq expression levels. See Lior Pachter's detailed explanation if you want to delve into it more: https://liorpachter.wordpress.com/2014/04/30/estimating-number-of-transcripts-from-rna-seq-measurements-and-why-i-believe-in-paywall/. Lior is very entertaining and informative. Each column in the expression data *should* add up to 1,000,000.
+
+```{r}
+colSums(pson_tpm_mat)
+```
+
+Most of the columns *don't* add up to a million — can you think of why this might have happened? (**hint:** the original data table included many more rows than the 18,682 we see here, but we removed any genes that were not annotated to code for proteins)
+
+Finally, we often apply a logarithmic transformation so that outliers don't dominate everything. But we can't take the log of 0 values. Therefore we often use something called the "moderated" or "shifted" log transform. **Note:** it can be useful (for yourself and others) to provide some information about the data you're using in the name each variable — for example, we'll clarify that our matrix now contains `logtpm` values.
+
+```{r}
+pson_logtpm_mat <- log2(1 + pson_tpm_mat)
+pson_logtpm_mat[1:5, 1:5]
+```
+
+## Physical information on these cell lines — i.e., the motility data
+
+The `load()` command below will add a new data frame to our environment containing summarized motility measurements from cell growth and imaging experiments.
+
+```{r}
+load("../../data/pson_motility_tidy_df.RData")
+head(pson_motil_tidy_df)
+```
+
+Let's try to tie gene expression to the speed at which cells can move. First pull out only that information:
+
+```{r}
+cell_speeds_df <- subset(pson_motil_tidy_df, summary_metric == "speed_um_hr")
+head(cell_speeds_df)
+```
+
+These were measured in different conditions. The `table()` command can automatically give us the counts of observations for each condition:
+
+```{r}
+table(cell_speeds_df$experimentalCondition)
+```
+
+Let's just look at the `"HyaluronicAcid Collagen"`" condition (I picked that at random).
+
+```{r}
+hyal_coll_df <- subset(cell_speeds_df, 
+                       experimentalCondition == "HyaluronicAcid Collagen")
+head(hyal_coll_df)
+```
+
+We only have data for some of the cell lines for which we have gene expression data, so we can just extract the gene expression for those cell lines. We need to `match()` the `sample` name in the motility information to the column names in the expression data.
+
+```{r}
+samples_w_expr <- match(hyal_coll_df$sample, colnames(pson_logtpm_mat))
+hyal_coll_logtpm_mat <- pson_logtpm_mat[, samples_w_expr]
+dim(hyal_coll_logtpm_mat)
+```
+
+I was a bit careless there — can you see why? (**hint:** what if not all cell lines had expression data?)
+
+Check that the rows of the motility information line up with the columns of the expression data. 
+```{r}
+# 1. Check the sample names of `hyal_coll_df`
+
+# 2. Check the column names of `hyal_coll_logtpm_mat`
+
+```
+
+Let's see if any genes are correlated with the speed a cell moves at (we're ignoring cell line type - what are we assuming?). This uses the **`cor()`** function to produce a correlation matrix. We want to correlate `average_value` from the speed on Hyaluronic acid Collagen to the expression matrix.
+
+```{r, warning=FALSE}
+speed_cor_mat <- cor(hyal_coll_df$average_value, t(hyal_coll_logtpm_mat))
+```
+
+There are a couple of ways we could visualize that.
+
+```{r}
+par(mfrow = c(1, 2)) # This tells R I want it to layout a plot with two panels 
+                     # arranged as 2 columns and 1 row
+hist(speed_cor_mat)
+plot(ecdf(speed_cor_mat))
+grid() # included dashed gridlines
+```
+
+By chance some things would be non-zero. A visual way to check this is with a quantile-quantile plot.
+
+```{r}
+qqnorm(speed_cor_mat)
+qqline(speed_cor_mat)
+grid()
+```
+
+We could also "fit" a normal distribution (bell curve) and plot it on top of the histogram.
+
+```{r}
+speed_cor_mean <- mean(speed_cor_mat, na.rm = TRUE)
+speed_cor_std <- sd(speed_cor_mat, na.rm = TRUE)
+hist(speed_cor_mat, prob = TRUE, 50)
+curve(dnorm(x, mean = speed_cor_mean, sd = speed_cor_std),
+      col = "darkblue", lwd = 2, add = TRUE, yaxt = "n")
+```
+
+It's a bit hard to tell from this if those are significant or not. Let's put aside the significance for the moment and continue to look at what genes are positively or negatively correlated with cell speed. First it's convenient to put the correlation results in a more easy to use form by flipping them on their side.
+
+```{r, warning=FALSE}
+speed_cor_df <- data.frame(rownames(hyal_coll_logtpm_mat), t(speed_cor_mat))
+head(speed_cor_df)
+colnames(speed_cor_df) <- c("Gene", "Corr.to.speed")
+head(speed_cor_df)
+```
+
+And we can sort them in either direction:
+
+```{r}
+speed_cor_df <- speed_cor_df[order(speed_cor_df$Corr.to.speed), ]
+head(speed_cor_df)
+speed_cor_df <- speed_cor_df[order(speed_cor_df$Corr.to.speed, decreasing = TRUE), ]
+head(speed_cor_df)
+```
+
+Let's just plot the top one vs speed to see what the relationship looks like.
+
+```{r}
+gene <- "GSPT2"
+gene_row <- which(rownames(hyal_coll_logtpm_mat) == gene)
+gene_row
+plot(x = hyal_coll_logtpm_mat[gene_row, ], 
+     y = hyal_coll_df$average_value, 
+     xlab = gene, ylab = "average speed")
+```
+That looks a little suspicious — are different cell line types (from different types of cancer) grouping together?
+
+```{r}
+View(hyal_coll_df[order(hyal_coll_df$average_value), ])
+```
+
+In general we should really consider different cancer types separately. For example just breast cancer. But we only have motility data on a couple of them which makes doing a rigorous analysis hard. Nonetheless, let's see if we can get anything from the breast cancer. 
+
+```{r}
+# check which rows in `hyal_coll_df` correspond to breast cancer cell lines;
+# these should tell us which columns to use in the expression data
+which(hyal_coll_df$diagnosis == "Breast Cancer")
+```
+
+There are only two with motility info. One is twice as fast as the other (look at the `hyal_coll_df` data frame).
+
+```{r}
+hyal_coll_df[c(7, 9), ]
+```
+
+
+```{r, warning=FALSE}
+breast_logtpm_df <- data.frame(rownames(hyal_coll_logtpm_mat), hyal_coll_logtpm_mat[, c(7, 9)])
+names(breast_logtpm_df) <- c("gene", "slower", "faster")
+breast_logtpm_df$delta <- breast_logtpm_df[, "faster"] - breast_logtpm_df[, "slower"]
+breast_logtpm_df <- breast_logtpm_df[order(breast_logtpm_df$delta, decreasing = TRUE), ]
+head(breast_logtpm_df, 10)
+tail(breast_logtpm_df, 10)
+```
+
+If those were numbers on a lottery ticket, I'd be happy right now. Vimentin (VIM) is one of the classic genes associated with mesenchymal cells that are mobile. It is up-regulated during the epithelial-mesenchymal transition (EMT) when epithelial cells (such as those that make up a solid tissue) detach from their local environment and move. On the other end of the spectrum, CDH1 or E-cadherin is up-regulated during the reverse transition (MET), allowing cells to form new adhesisons and return to an epithelial state.
+
+---
+
+# mini-DREAM Challenge  
+
+**QUESTION:** When the analysis is repeated for a different cancer type, do similar genes come out at the top and bottom of the list as in breast cancer?
+
+Let's look at colon cancer for now, as we still have 2 different cell lines and they appear to have fairly different speeds.
+
+```{r}
+# check which rows in `hyal_coll_df` correspond to breast cancer cell lines;
+# these should tell us which columns to use in the expression data
+which(hyal_coll_df$diagnosis == "Colon Cancer")
+```
+
+Check these rows in the data frame to make sure that the numbers inside `c()` are ordered such that the *slower* cell line is listed first.
+
+```{r}
+# 1. Delete the '#' and fill in the row numbers; adjust the order as necessary
+#    and re-run the chunk.
+
+# hyal_coll_df[c( ), ]
+
+```
+
+Now you should be ready to see which genes correspond to the largest differences in speed between the two cell lines.
+
+```{r, warning=FALSE}
+# 2. Create a data frame with only expression values for the two colon cancer 
+#    cell lines. 
+
+# my_logtpm_df <- ... # fill in here
+# names(my_logtpm_df) <- c("gene", "slower", "faster")
+
+# 3. Calculate the difference in speed between the two cell lines (faster minus
+#    slower) and store in the `delta` column.
+
+# my_logtpm_df$delta <- ... # fill in here
+
+# 4. Order the rows in your data frame from highest to lowest delta.
+
+# my_logtpm_df <- ... # fill in here
+
+# 5. View the top 10 and bottom 10 rows of the ordered data frame.
+
+# ... fill in here
+
+```
+
+Pick **one** gene in the top 10 or bottom 10 of the list. Save the name and the value of `delta` for that gene here.
+
+```{r}
+my_gene <- ""
+my_delta <- 0
+```
+
+Now, do a quick Google search and provide a brief description of what that gene does. Copy the description here.
+
+```{r}
+my_description <- ""
+```
+
+Try to brainstorm why the expression of this gene might be related to cell motility, either in cancer or in general. Write a brief summary of your hypothesis here.
+
+```{r}
+my_rationale <- ""
+```
+
+
+## Submitting the prediction
+
+You're now ready to submit the prediction. Just run the chunk below, a file with your prediction will be uploaded to Synapse and submitted to the challenge. You'll be able to see the results of your prediction on the mini-DREAM scoreboards, with the submission ID that gets printed below.
+
+```{r}
+library(synapser)
+synLogin(rememberMe = TRUE, silent = TRUE)
+submit_module_answers(module = 1)
+```
+
+Congrats — you’ve reached the end of **Module 1**! You can now return to the **mini-DREAM Challenge** site on Synapse.
+
+---
+
+# Bonus
+
+1. Are the speeds at which cells move on different substrates correlated? e.g., do cell lines that move faster on glass also move faster in the `"HyaluronicAcid Fibronectin"` condition? You'll need to pull out the data for different conditions, line up the cell lines, and check the correlation.
+
+2. Try similar analysis to what we did above for the cell speed on a different medium. You could also try one of the other measures of motility such as the distance they move rather than the speed.
+
+3. Go to the mSigDB website at http://software.broadinstitute.org/gsea/msigdb/annotate.jsp. Put in the top (say) 40 genes (or the bottom if you want) and compare to the gene sets that this website knows about. This is often a useful way to make sense of gene lists and put them into biological context.
