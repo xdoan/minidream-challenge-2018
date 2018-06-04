@@ -1,9 +1,7 @@
 # Use rpy2 if you have R scoring functions
-# import rpy2.robjects as robjects
-# import os
-# filePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'getROC.R')
-# robjects.r("source('%s')" % filePath)
-# AUC_pAUC = robjects.r('GetScores')
+import rpy2.robjects as robjects
+import os
+
 ##-----------------------------------------------------------------------------
 ##
 ## challenge specific code and configuration
@@ -21,8 +19,7 @@ CHALLENGE_NAME = "CSBC PS-ON mini-DREAM Challenge"
 
 ## Synapse user IDs of the challenge admins who will be notified by email
 ## about errors in the scoring script
-ADMIN_USER_IDS = []
-
+ADMIN_USER_IDS = [2223305, 3324230]
 
 ## Each question in your challenge should have an evaluation queue through
 ## which participants can submit their predictions or models. The queues
@@ -38,42 +35,38 @@ ADMIN_USER_IDS = []
 ## every time the script starts and you can link the challenge queues to
 ## the correct scoring/validation functions.  Predictions will be validated and 
 
-def validate_func(submission, goldstandard_path):
-    ##Read in submission (submission.filePath)
-    ##Validate submission
-    ## MUST USE ASSERTION ERRORS!!! 
-    ##eg.
-    ## assert os.path.basename(submission.filePath) == "prediction.tsv", "Submission file must be named prediction.tsv"
-    ## or raise AssertionError()...
-    ## Only assertion errors will be returned to participants, all other errors will be returned to the admin
-    return(True,"Passed Validation")
+module_config = [
+    {
+        fileName:"activity-0.yml",
+        module:0
+    }
+]
 
-def score1(submission, goldstandard_path):
-    ##Read in submission (submission.filePath)
-    ##Score against goldstandard
-    return(score1, score2, score3)
+module_by_name = {q['fileName']:q for q in module_config}
 
-def score2(submission, goldstandard_path):
-    ##Read in submission (submission.filePath)
-    ##Score against goldstandard
-    return(score1, score2, score3)
+
+def score(submission):
+    fileName = os.path.basename(submission.filePath)
+    moduleName = fileName.split("_")[1]
+    moduleNo = module_by_name[moduleName]["module"]
+
+    filePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'../modules/module%s/eval/eval_fxn.R' % moduleNo)
+    robjects.r("source('%s')" % filePath)
+    scoring_func = robjects.r('score_submission')
+
+    results = scoring_func(submission.filePath)
+    print(results)
+
+    return(dict(module="Module %s" % moduleNo))
 
 evaluation_queues = [
     {
-        'id':1,
-        'scoring_func':score1,
-        'validation_func':validate_func,
-        'goldstandard_path':'path/to/sc1gold.txt'
-    },
-    {
-        'id':2,
-        'scoring_func':score2,
-        'validation_func':validate_func,
-        'goldstandard_path':'path/to/sc2gold.txt'
-
+        'id':9612371
+        'scoring_func':score,
     }
 ]
 evaluation_queue_by_id = {q['id']:q for q in evaluation_queues}
+
 
 
 ## define the default set of columns that will make up the leaderboard
@@ -121,8 +114,8 @@ def score_submission(evaluation, submission):
               is text for display to user
     """
     config = evaluation_queue_by_id[int(evaluation.id)]
-    score = config['scoring_func'](submission, config['goldstandard_path'])
+    score = config['scoring_func'](submission)
     #Make sure to round results to 3 or 4 digits
-    return (dict(score=round(score[0],4), rmse=score[1], auc=score[2]), "You did fine!")
+    return (score, "You did fine!")
 
 
