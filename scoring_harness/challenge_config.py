@@ -47,9 +47,10 @@ module_by_name = {q['fileName']:q for q in module_config}
 
 def score(submission):
     fileName = os.path.basename(submission.filePath)
-    moduleName = fileName.split("_")[1]
+    fileNameSplit = fileName.split("_")
+    moduleName = fileNameSplit[1]
     moduleNo = module_by_name[moduleName]["module"]
-
+    userName = fileNameSplit[0]
     filePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'../modules/module%s/eval/eval_fxn.R' % moduleNo)
     robjects.r("source('%s')" % filePath)
     scoring_func = robjects.r('score_submission')
@@ -57,7 +58,7 @@ def score(submission):
     results = scoring_func(submission.filePath)
     print(results)
 
-    return(dict(module="Module %s" % moduleNo))
+    return(dict(module="Module %s" % moduleNo, userName=userName))
 
 evaluation_queues = [
     {
