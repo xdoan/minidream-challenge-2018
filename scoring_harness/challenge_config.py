@@ -37,13 +37,12 @@ ADMIN_USER_IDS = [2223305, 3324230]
 
 module_config = [
     {
-        fileName:"activity-0.yml",
-        module:0
+        "fileName":"activity-0.yml",
+        "module":0
     }
 ]
 
 module_by_name = {q['fileName']:q for q in module_config}
-
 
 def score(submission):
     fileName = os.path.basename(submission.filePath)
@@ -56,13 +55,14 @@ def score(submission):
     scoring_func = robjects.r('score_submission')
 
     results = scoring_func(submission.filePath)
-    print(results)
-
-    return(dict(module="Module %s" % moduleNo, userName=userName))
+    annotations = {key:value[0] for key, value in zip(results.names, results)}
+    annotations['module'] = "Module %s" % moduleNo
+    annotations['userName'] = userName
+    return(annotations)
 
 evaluation_queues = [
     {
-        'id':9612371
+        'id':9612371,
         'scoring_func':score,
     }
 ]
@@ -116,7 +116,6 @@ def score_submission(evaluation, submission):
     """
     config = evaluation_queue_by_id[int(evaluation.id)]
     score = config['scoring_func'](submission)
-    #Make sure to round results to 3 or 4 digits
     return (score, "You did fine!")
 
 

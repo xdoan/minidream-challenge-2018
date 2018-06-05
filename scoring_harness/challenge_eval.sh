@@ -7,7 +7,7 @@ fi
 #Validate submissions
 #---------------------
 #Remove --send-messages to do rescoring without sending emails to participants
-python $script_dir/challenge.py -u "synapse user here" --send-messages --notifications validate --all >> $script_dir/log/score.log 2>&1
+#python $script_dir/challenge.py -u "synapse user here" --send-messages --notifications validate --all >> $script_dir/log/score.log 2>&1
 
 #--------------------
 #Score submissions
