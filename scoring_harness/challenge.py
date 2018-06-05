@@ -30,7 +30,7 @@ import synapseutils as synu
 
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from itertools import izip
+#from itertools import izip
 from StringIO import StringIO
 import copy
 
