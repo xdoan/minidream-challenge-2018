@@ -323,7 +323,7 @@ def score(evaluation, canCancel, dry_run=False):
 
             if conf.ADMIN_USER_IDS:
                 submission_info = "submission id: %s\nsubmission name: %s\nsubmitted by user id: %s\n\n" % (submission.id, submission.name, submission.userId)
-                messages.error_notification(userIds=conf.ADMIN_USER_IDS, message=submission_info+st.getvalue())
+                messages.error_notification(userIds=conf.ADMIN_USER_IDS, message=submission_info+st.getvalue(), queue_name=evaluation.name)
 
         if not dry_run:
             status = syn.store(status)
