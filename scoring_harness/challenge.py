@@ -304,7 +304,7 @@ def score(evaluation, canCancel, dry_run=False):
                 score['team'] = get_user_name(profile)
             else:
                 score['team'] = '?'
-            add_annotations = synapseclient.annotations.to_submission_status_annotations(score,is_private=True)
+            add_annotations = synapseclient.annotations.to_submission_status_annotations(score,is_private=False)
             status = update_single_submission_status(status, add_annotations)
 
             status.status = "SCORED"
@@ -341,9 +341,9 @@ def score(evaluation, canCancel, dry_run=False):
                 submission_id=submission.id)
         else:
             messages.scoring_error(
-                userIds=conf.ADMIN_USER_IDS,
+                userIds=[submission.userId],
                 message=message,
-                username="Challenge Administrator,",
+                username=get_user_name(profile),
                 queue_name=evaluation.name,
                 submission_name=submission.name,
                 submission_id=submission.id)
