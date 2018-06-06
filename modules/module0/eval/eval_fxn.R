@@ -22,7 +22,7 @@ score_submission <- function(submission_filename) {
   if (age_diff > 0) {
     age_msg <- str_glue("You overshot by {d} years.", d = age_diff)
   } else if (age_diff < 0) {
-    age_msg <- str_glue("Under by {d} years.", d = age_diff)
+    age_msg <- str_glue("Under by {d} years.", d = abs(age_diff))
   } else {
     age_msg <- "Nailed it!"
   }
