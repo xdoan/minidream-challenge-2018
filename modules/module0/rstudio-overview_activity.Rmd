@@ -7,6 +7,7 @@ output: html_notebook
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+source("../../R/submission_helpers.R")
 ```
 
 # About this activity
@@ -87,7 +88,7 @@ Enter your best guess of my birthday. For a bonus, you can guess my age too.
 
 ```{r}
 # format your guess as 'MM/DD'
-my_bday_guess <- ""
+my_bday_guess <- "01/01"
 
 # just give a round number for this one
 my_age_guess <- 0
@@ -101,7 +102,7 @@ You're now ready to submit the prediction. Just run the chunk below, a file with
 ```{r}
 library(synapser)
 synLogin(rememberMe = TRUE, silent = TRUE)
-submit_module_answers(module = 0)
+submission <- submit_module_answers(module = 0)
 ```
 
 Congrats — you've reached the end of **Module 0**! You can now return to the **mini-DREAM** Challenge site on Synapse. **Make sure to save your work before you leave!**
