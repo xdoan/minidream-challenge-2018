@@ -1,4 +1,5 @@
 library(yaml)
+library(jsonlite)
 
 create_module0_submission <- function() {
   submission_filename <- paste(Sys.getenv("USER"), "activity-0.yml", sep = "_")
@@ -42,10 +43,21 @@ submit_module_answers <- function(module) {
     "0" = create_module0_submission(),    
     "1" = create_module1_submission()
   )
-  # activity_submission <- synStore(
-  #   File(path = submission_filename, parentId = "syn10142597")
-  # )
-  # submission <- submit(evaluation = "9604686", entity = activity1_submission)
-  print(paste0("Successfully submitted file: '", submission_filename, "'"))
-  # print(submission[[1]]$id)
+  submission_folder <- switch(
+    module,
+    "0" = "syn12369913",
+    "1" = "syn12440746"
+  )
+  activity_submission <- synStore(
+    File(path = submission_filename, parentId = submission_folder)
+  )
+  submission <- synSubmit(evaluation = "9612371", entity = activity_submission)
+  
+  message("")
+  message(paste0("Successfully submitted file: '", submission_filename, "'"))
+  message(paste0("... stored as '", fromJSON(s$entityBundleJSON)$entity$id, "'"))
+  message(paste0("Submission ID: '", submission$id))
+  
+  return(submission)
+  # print(paste0("Stored as: '", submission[[1]]$id, "'"))
 }
