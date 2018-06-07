@@ -12,4 +12,4 @@ fi
 #--------------------
 #Score submissions
 #--------------------
-python $script_dir/challenge.py -u "synapse user here" --send-messages --notifications score --all >> $script_dir/log/score.log 2>&1
+python $script_dir/challenge.py -u "jaeddy" --send-messages --notifications score --all >> $script_dir/log/score.log 2>&1
