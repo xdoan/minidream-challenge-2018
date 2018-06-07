@@ -50,7 +50,7 @@ def score(submission):
     moduleName = fileNameSplit[1]
     moduleNo = module_by_name[moduleName]["module"]
     userName = fileNameSplit[0]
-    filePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'../modules/module%s/eval/eval_fxn.R' % moduleNo)
+    filePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'../modules/module%s/.eval/eval_fxn.R' % moduleNo)
     robjects.r("source('%s')" % filePath)
     scoring_func = robjects.r('score_submission')
 
