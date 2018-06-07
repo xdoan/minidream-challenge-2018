@@ -55,7 +55,7 @@ submit_module_answers <- function(module) {
   
   message("")
   message(paste0("Successfully submitted file: '", submission_filename, "'"))
-  message(paste0("... stored as '", fromJSON(s$entityBundleJSON)$entity$id, "'"))
+  message(paste0("... stored as '", fromJSON(submission$entityBundleJSON)$entity$id, "'"))
   message(paste0("Submission ID: '", submission$id))
   
   return(submission)

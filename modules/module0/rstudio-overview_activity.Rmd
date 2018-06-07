@@ -1,13 +1,15 @@
 ---
 title: "RStudio orientation"
 author: "James Eddy"
-date: '`r lubridate::today()`'
+date: "`r lubridate::today()`"
 output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-source("../../R/submission_helpers.R")
+data_dir <- "/home/shared/data"
+scripts_dir <- "/home/shared/R"
+source(file.path(scripts_dir, "submission_helpers.R"))
 ```
 
 # About this activity
@@ -54,7 +56,7 @@ You should see a scatterplot of points for distance values (`dist`) versus `spee
 One last feature that's worth mentioning: R Notebooks have a pretty handy way of displaying information in tables known as **data frames**. Basically, instead of trying to dump an entire table on the screen at once, the notebook interface will split things into rows of 10 and however many columns fit on the screen. You can scroll through rows by clicking on the **'Previous'** or **'Next'** buttons (or any of the individual page numbers). To view other columns, click on the little white arrow at the top right corner of the table.
 
 ```{r}
-load("../../data/pson_motility_tidy_df.RData")
+load(file.path(data_dir, "pson_motility_tidy_df.RData"))
 pson_motil_tidy_df
 ```
 
@@ -88,10 +90,10 @@ Enter your best guess of my birthday. For a bonus, you can guess my age too.
 
 ```{r}
 # format your guess as 'MM/DD'
-my_bday_guess <- "01/01"
+my_bday_guess <- "11/01"
 
 # just give a round number for this one
-my_age_guess <- 0
+my_age_guess <- 60
 ```
 
 
@@ -101,10 +103,12 @@ You're now ready to submit the prediction. Just run the chunk below, a file with
 
 ```{r}
 library(synapser)
-synLogin(rememberMe = TRUE, silent = TRUE)
+synLogin('my_synapse_username', 'my_synapse_password',
+         rememberMe = TRUE, silent = TRUE)
 submission <- submit_module_answers(module = 0)
 ```
 
 Congrats — you've reached the end of **Module 0**! You can now return to the **mini-DREAM** Challenge site on Synapse. **Make sure to save your work before you leave!**
 
+---
 
