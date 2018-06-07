@@ -1,40 +1,19 @@
 ---
 title: "RStudio & R Notebooks Overview"
-author: "James Eddy"
+author: "James Eddy — Sage Bionetworks"
 date: "June 7, 2018"
 output: 
   revealjs::revealjs_presentation:
     theme: sky
     reveal_options:
       slideNumber: true
+      width: 1260
+      height: 720
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-<section class="titleslide level1">
-<h1>Navigating Slides</h1>
-
-If you see a blue **down** arrow in the bottom right corner of the screen, you can click that arrow to advance to the next slide in the current section.
-
-```{r, out.width="150px", echo=FALSE}
-knitr::include_graphics("img/down-arrow.png")
-```
-
-## Moving between sections
-
-If the down arrow is grayed out, you're at the end of the section. Click the **right** arrow to continue on to the next section.
-
-```{r, out.width="150px", echo=FALSE}
-knitr::include_graphics("img/right-arrow.png")
-```
-
-> Quick tip: any of the links in this and other presentations will open in a new window or tab (depending on your browser). To return to this page, just close the new window/tab when you're done.
-
-</section>
-
-
 
 # RStudio
 
@@ -47,7 +26,7 @@ knitr::include_graphics("img/right-arrow.png")
 knitr::include_graphics("img/rstudio.png")
 ```
 
-- RStudio also provides lots of helpful features that make writing R code easier
+- RStudio also provides lots of helpful features and packages that make writing R code easier
 
 ## RStudio — Layout
 
@@ -81,22 +60,6 @@ Outputs will be saved in the current workspace.
 knitr::include_graphics("img/rstudio-command2.png")
 ```
 
-## RStudio — Projects
-
-We'll be using RStudio *projects* to keep things organized.
-
-```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
-knitr::include_graphics("img/rstudio-projects1.png")
-```
-
-## RStudio — Projects
-
-Switching projects changes the folder you're working in.
-
-```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
-knitr::include_graphics("img/rstudio-projects2.png")
-```
-
 ## RStudio — R Notebooks
 
 mini-DREAM activities are based in **R Notebooks**, which have `.Rmd` ... more on this in **Activity 0**.
@@ -128,4 +91,25 @@ You can inspect the contents of outputs by clicking on object names.
 ```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
 knitr::include_graphics("img/rstudio-workspace.png")
 ```
+
+
+# What next?
+
+## **Module 0 Activity**
+
+- Navigate to [**Challenge Modules — Module 0**](https://www.synapse.org/#!Synapse:syn12105406/wiki/527879) on the mini-DREAM Synapse site for more info:
+
+&nbsp;
+
+https://www.synapse.org/#!Synapse:syn12105406/wiki/527879
+
+&nbsp;
+
+- Next week (Tues. 6/12 and Thurs. 6/14) — **Module 1** with Andrew Gentles:
+
+&nbsp;
+
+> **Programming and modeling for life sciences**
+
+ 
 
