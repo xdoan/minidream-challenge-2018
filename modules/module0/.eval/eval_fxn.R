@@ -1,6 +1,7 @@
 library(yaml)
 library(tidyverse)
 library(lubridate)
+library(glue)
 
 
 score_submission <- function(submission_filename) {
@@ -10,19 +11,19 @@ score_submission <- function(submission_filename) {
   bday_actual <- parse_date_time("06/09", "md")
   bday_diff <- bday_guess - bday_actual
   if (as.numeric(bday_diff) < 0) {
-    bday_msg <- str_glue("Your guess was {d} days too early.",
+    bday_msg <- glue("Your guess was {d} days too early.",
                     d = abs(as.numeric(bday_diff)))
   } else {
-    bday_msg <- str_glue("Your guess was {d} days too late.",
+    bday_msg <- glue("Your guess was {d} days too late.",
                     d = abs(as.numeric(bday_diff)))
   }
   
   age_actual <- 32
   age_diff <- answers$age - age_actual
   if (age_diff > 0) {
-    age_msg <- str_glue("You overshot by {d} years.", d = age_diff)
+    age_msg <- glue("You overshot by {d} years.", d = age_diff)
   } else if (age_diff < 0) {
-    age_msg <- str_glue("Under by {d} years.", d = abs(age_diff))
+    age_msg <- glue("Under by {d} years.", d = abs(age_diff))
   } else {
     age_msg <- "Nailed it!"
   }
