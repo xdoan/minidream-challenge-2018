@@ -1,5 +1,6 @@
 library(yaml)
 library(tidyverse)
+library(glue)
 
 
 score_submission <- function(submission_filename) {
@@ -33,13 +34,14 @@ score_submission <- function(submission_filename) {
   delta_match <- all_equal(
     round(colon_logtpm_df$delta, digits = 3),
     round(answers$delta, digits = 3)
-  )
+  ) %>%
+    isTRUE()
   
   if (delta_match) {
-    msg <- str_glue("You found that `delta` was {d}. Me too — cool!",
+    msg <- glue("You found that `delta` was {d}. Me too — cool!",
                     d = round(answers$delta, digits = 3))
   } else {
-    msg <- str_glue("Hmm... you said `delta` was {d}, but I found that it was ",
+    msg <- glue("Hmm... you said `delta` was {d}, but I found that it was ",
                     "{d0}. Maybe you swapped the row numbers for 'slower' ",
                     "and 'faster'.", 
                     d = round(answers$delta, digits = 3), 
