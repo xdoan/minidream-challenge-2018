@@ -38,9 +38,14 @@ ADMIN_USER_IDS = [2223305, 3324230]
 module_config = [
     {
         "fileName":"activity-0.yml",
-        "module":0
+        "module": 0
+    },
+    {
+        "fileName": "activity-1.yml",
+        "module": 1
     }
 ]
+
 
 module_by_name = {q['fileName']:q for q in module_config}
 
