@@ -9,7 +9,9 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-source("../../R/submission_helpers.R")
+data_dir <- "/home/shared/data"
+scripts_dir <- "/home/shared/R"
+source(file.path(scripts_dir, "submission_helpers.R"))
 ```
 
 # About this activity
@@ -30,7 +32,7 @@ Let's load some data and examine it a bit. We will mostly be loading the data fr
 
 ```{r}
 # this is a comment -- R will ignore any text following '#'
-load("../../data/pson_expr_tpm_df.RData")
+load(file.path(data_dir, "pson_expr_tpm_df.RData"))
 ls() # short for the word "list"
 ```
 
@@ -84,7 +86,7 @@ dim(pson_expr_tpm_df)
 Those gene IDs are not very informative — they come from a database called ENSEMBL. More commonly, we would use the Hugo gene symbols (https://www.genenames.org/). These are the gene names you are more used to seeing (MYC, BRCA1, etc). We have this information stored in another file.
 
 ```{r}
-load("../../data/pson_expr_gene_info.RData")
+load(file.path(data_dir, "pson_expr_gene_info.RData"))
 ```
 
 Take a moment to look at the information you just downloaded. Does it have the same number of genes as the expression matrix? In the same order?
@@ -154,7 +156,7 @@ pson_logtpm_mat[1:5, 1:5]
 The `load()` command below will add a new data frame to our environment containing summarized motility measurements from cell growth and imaging experiments.
 
 ```{r}
-load("../../data/pson_motility_tidy_df.RData")
+load(file.path(data_dir, "pson_motility_tidy_df.RData"))
 head(pson_motil_tidy_df)
 ```
 
@@ -366,7 +368,7 @@ You're now ready to submit the prediction. Just run the chunk below, a file with
 ```{r}
 library(synapser)
 synLogin(rememberMe = TRUE, silent = TRUE)
-submit_module_answers(module = 1)
+submission <- submit_module_answers(module = 1)
 ```
 
 Congrats — you’ve reached the end of **Module 1**! You can now return to the **mini-DREAM Challenge** site on Synapse.
