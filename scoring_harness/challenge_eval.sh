@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 export PATH="$HOME/miniconda/bin:$PATH"
-source activate minidream
+conda activate minidream
 
 # Automation of validation and scoring
 script_dir=$(dirname $0)
