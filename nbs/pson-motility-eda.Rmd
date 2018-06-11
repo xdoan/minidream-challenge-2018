@@ -1,0 +1,1041 @@
+---
+title: "PSON Cell Line Data Exploration"
+output: 
+  html_notebook:
+    code_folding: hide
+    toc: true
+    toc_float: true
+---
+
+
+## Summary
+
+Exploring the relationship bewteen
++ **motility** (speed, total distance, and end-to-end distance) across 7 experimental conditions; and
++ **expression** (TPM normalized RNA-seq read counts) across the same 7 experimental conditions
+for **9** cell lines.
+
+### Key
+
+Some abbreviations I use in variable names throughout.
+
+- `pson`: all relevant PS-ON cell lines
+- `brca`: breast cancer only
+- `motil`: motility
+- `diag`: diagnosis
+- `dist`: distance
+- `expr`: expression
+- `tpm`: transcripts per million
+- `logtpm`: log(TPM + 1)
+- `df`: dataframe
+- `mat`: matrix
+
+---
+
+## Setup
+
+Load packages, log into Synapse, etc.
+
+```{r}
+# for getting data from Synapse
+library(synapser)
+
+# general data management and manipulation packages
+library(tidyverse)
+library(stringr)
+library(janitor)
+library(forcats)
+
+# plotting and visualization packages
+library(ggthemes)
+library(ggrepel)
+library(ggExtra)
+library(patchwork)
+library(kableExtra)
+
+# analysis packages
+library(broom)
+library(annotables)
+```
+
+```{r}
+synLogin()
+```
+
+---
+
+## Data collection
+
+All data was retrievied from the [**PS-ON Cell Line Characterization Portal**](https://www.synapse.org/#!Synapse:syn7248578) in Synapse.
+
+### Expression data
+
+I'll first grab basic "sample" info for cell lines from the [**Proteomics and RNA** Synapse table](https://www.synapse.org/#!Synapse:syn10320914/tables/), for all files containing RSEM gene quantification outputs.
+
+```{r}
+# collect "sample" metadata for cell lines with expression data available 
+prot_rna_meta_fv_id <- "syn10320914"
+
+sample_df <- synTableQuery(
+  str_glue(
+    "SELECT replace(name, '_rsem.genes.results.txt', '') as sample, id,
+     diagnosis, cellType, catalogNumber, cellLine, 
+     experimentalCondition, organ, tumorType 
+     FROM {fv_id} 
+     WHERE study = 'RNA Study' AND name LIKE '%rsem%'",
+    fv_id = prot_rna_meta_fv_id
+  ),
+  includeRowIdAndRowVersion = FALSE
+) %>% 
+  as.data.frame()
+```
+
+Taking a look at `sample_df`:
+
+```{r}
+sample_df
+```
+
+
+I'll do a bit of munging with the `experimentalCondition` variable to to create separate variables for `surface`, `laminate`, and `stiffness` (in case we want to break things down further with any visualization or analysis).
+
+```{r, warning=FALSE}
+sample_tidy_df <- sample_df %>% 
+  # tidy up experimental condition info
+  mutate(experimentalCondition = str_replace_all(
+    experimentalCondition, " Acid", "Acid"
+  )) %>%
+  separate(experimentalCondition,
+           into = c("stiffness","stiffness_units", "surface"),
+           remove = FALSE, extra = "merge", fill = "left") %>%
+  mutate(
+    surface = case_when(
+      surface %in% c("Collagen", "Fibronectin") ~ experimentalCondition,
+      TRUE ~ surface
+    ),
+    stiffness_units = ifelse(is.na(stiffness), NA, stiffness_units)
+  ) %>%
+  separate(surface, into = c("surface", "laminate")) %>%
+  mutate(
+    stiffness = parse_number(stiffness),
+    stiffness_units = str_trim(stiffness_units),
+    stiffness_norm = case_when(
+      stiffness_units == "Pa" ~ stiffness / 1000,
+      TRUE ~ stiffness
+    )
+  )
+```
+
+I also split `stiffness_units` into a separate variable and added a `stiffness_norm` such that all values are in "kPa" units. **Note:** scroll over to view the new columns.
+
+```{r}
+sample_tidy_df
+```
+
+Next, for all the samples in `sample_tidy_df`, I'll download the file corresponding to the Synapse ID, extract `TPM` values, and combine everything into a single dataframe. Even though I'll do some additional transformation and filtering with the expression data below, I'll go ahead and save the full dataframe as `"pson_expr_tpm_df.RData"`.
+
+**Note:** I'll use the `annotables` package to augment the Ensembl gene IDs with some additional field to provide more context: 
+
++ `entrez`: NCBI Entrez gene ID
++ `symbol`: HGNC gene symbol
++ `biotype`: Protein coding, pseudogene, mitochondrial tRNA, etc.
++ `description`: Full gene name/description
+
+I'll save this dataframe as `"pson_expr_gene_df.RData"`.
+
+```{r, message=FALSE}
+# extract expression data from individual files
+extract_expr_tpm <- function(syn_id) {
+  synGet(syn_id) %>% 
+    pluck("path") %>% 
+    read_tsv() %>% 
+    select(gene_id, TPM)
+}
+
+sample_id_map <- sample_tidy_df %>% 
+  select(sample, id) %>% 
+  deframe()
+
+pson_expr_tpm_file <- "../data/pson_expr_tpm_df.RData"
+if (!fs::file_exists(pson_expr_tpm_file)) {
+  # collect expression data for all cell lines and conditions
+  pson_expr_tpm_df <- sample_tidy_df %>% 
+    pluck("id") %>% 
+    set_names() %>% 
+    map_df(extract_expr_tpm, .id = "id") %>% 
+    spread(id, TPM) %>% 
+    rename(!!!sample_id_map)
+  
+  # update/augment gene identifiers; subset to protein coding genes ; 
+  # remove duplicate IDs
+  gene_df <- pson_expr_tpm_df %>% 
+    select(gene_id) %>% 
+    left_join(grch37, by = c("gene_id" = "ensgene")) %>% 
+    filter(biotype == "protein_coding") %>% 
+    select(gene_id, entrez, symbol, biotype, description) %>% 
+    filter(!duplicated(entrez) & !duplicated(gene_id))
+
+  # make sure gene info lines up with expression data
+  pson_expr_tpm_df <- pson_expr_tpm_df %>% 
+    left_join(select(gene_df, gene_id), ., by = "gene_id")
+  
+  save(pson_expr_tpm_df, file = pson_expr_tpm_file)
+  # also save TSV
+  write_tsv(pson_expr_tpm_df, 
+            path = str_replace(pson_expr_tpm_file, "RData", "tsv"))
+  
+  save(gene_df, file = "../data/pson_expr_gene_info.RData")
+  # also save TSV
+  write_tsv(gene_df, path = "../data/pson_expr_gene_info.tsv")
+} else {
+  load(pson_expr_tpm_file)
+  load("../data/pson_expr_gene_info.RData")
+}
+```
+
+Columns of the `pson_expr_tpm_df` dataframe correspond to `sample` observations in the `sample_tidy_df` dataframe; each row contains the TPM expression value of the gene indicated by the `gene_id` column. Looking at the first few rows only (there are `r nrow(pson_expr_tpm_df)` total...):
+
+```{r}
+head(pson_expr_tpm_df)
+```
+
+Taking a look at the first few rows of `gene_df`:
+
+```{r}
+head(gene_df)
+```
+
+### Motility data
+
+I'll collect metadata for motility summary files from the [**Physical Characterization View** Synapse table](https://www.synapse.org/#!Synapse:syn7747734/tables/) (again, for all cell lines). I only need the `id`, `catalogNumber`, and `experimentalCondition` columns so that I (i) can download each file below and (ii) correctly match up sample information from the expression data. 
+
+```{r}
+# retrieve cell line motility metadata from Synapse file view
+motil_meta_fv_id <- "syn7747734"
+
+pson_motil_meta_df <- synTableQuery(
+  str_glue("SELECT id, catalogNumber, experimentalCondition FROM {fv_id} 
+            WHERE study = 'Motility' AND name LIKE '%summary%'", 
+           fv_id = motil_meta_fv_id),
+  includeRowIdAndRowVersion = FALSE
+) %>% 
+  as.data.frame() %>% 
+  # format experimental condition to match sample dataframe above
+  mutate(experimentalCondition = str_replace_all(
+    experimentalCondition, " Acid", "Acid"
+  ))
+```
+
+Here's what the metadata dataframe looks like (**note:** only 9 of the `r n_distinct(pson_motil_meta_df$catalogNumber)` cell lines have corresponding expression data for the motility conditions tested).
+
+```{r}
+pson_motil_meta_df
+```
+
+\  
+
+> **Aside:** format and save sample data
+
+I'll go ahead and add Synapse IDs for the motility summary files to `sample_tidy_df`. The resulting `sample_map_df` dataframe contains all sample information and file IDs for both expression and motility files (`id_expr` and `id_motil`, respectively). 
+I'll also create a color palette that I can use for indicating diagnosis (cancer type) in plots below. I'll save both the `sample_map_df` dataframe and `diagnosis_colors` list as `"pson_sample_map_and_colors.RData"`.
+
+```{r}
+# build and save master sample dataframe
+sample_map_df <- sample_tidy_df %>% 
+  left_join(pson_motil_meta_df, 
+            by = c("catalogNumber", "experimentalCondition"),
+            suffix = c("_expr", "_motil"))
+
+diagnosis_colors <- sample_map_df %>% 
+  distinct(diagnosis) %>% 
+  mutate(color = ggthemes::tableau_color_pal("colorblind10")(nrow(.))) %>% 
+  deframe()
+
+save(sample_map_df, diagnosis_colors,
+     file = "../data/pson_sample_map_and_colors.RData")
+# also save TSV
+write_tsv(sample_map_df, path = "../data/pson_sample_map_df.tsv")
+write_tsv(enframe(diagnosis_colors), 
+          path = "../data/pson_diagnosis_colors_df.tsv")
+```
+
+Here's what the final sample info dataframe looks like:
+
+```{r}
+sample_map_df
+```
+
+And here are our diagnosis colors:
+
+```{r}
+diagnosis_colors
+```
+
+
+Similar to the expression data above, I'll download the motility summary files for all cell lines and all experimental conditions, read in the data, format things a bit, and combine into a single dataframe. I'll save the resulting dataframe as `"pson_motil_summary_df.RData"`. **Note:** I'll append columns from `sample_map_df` to the motility summary dataframe to avoid additional `join` steps below (the dataframe is still relatively small).
+
+```{r, message=FALSE}
+# extract motility summary data from individual files
+extract_motil_summary <- function(syn_id) {
+  if (!is.na(syn_id)) {
+    synGet(syn_id) %>% 
+      pluck("path") %>% 
+      # only take the first 4 rows; anything after that is unstructured and might
+      # cause errors
+      read_tsv(n_max = 4) %>% 
+      # clean and standardize columns and row names based on readme info 
+      # ftp://caftpd.nci.nih.gov/psondcc/PhysicalCharacterization/Motility/README.txt
+      clean_names() %>% 
+      mutate(statistic = c(
+        "average_value", 
+        "total_number_of_cells_tracked" ,
+        "standard_deviation", 
+        "standard_error"
+      )) %>% 
+      gather(summary_metric, value, -statistic) %>% 
+      spread(statistic, value)
+  } else {
+    data.frame()
+  }
+}
+
+pson_motil_summary_file <- "../data/pson_motility_summary_df.RData"
+if (!fs::file_exists(pson_motil_summary_file)) {
+  # collect summary data for all cell lines and conditions
+  pson_motil_summary_df <- sample_map_df %>% 
+    pluck("id_motil") %>% 
+    set_names() %>% 
+    map_df(extract_motil_summary, .id = "id_motil") %>% 
+    left_join(
+      sample_map_df,
+      by = "id_motil"
+    )
+  save(pson_motil_summary_df, file = pson_motil_summary_file)
+  # also save TSV
+  write_tsv(pson_motil_summary_df, 
+            path = str_replace(pson_motil_summary_file, "RData", "tsv"))
+} else {
+  load(pson_motil_summary_file)
+}
+```
+
+---
+
+## Data formatting
+
+Now that I have the basic information downloaded and stored in relatively usable formats, I'll do a bit of tidying and minimal "feature engineering" to faciliate visualization and analysis below.
+
+### Expression data
+
+For the expression data, I'll just convert the dataframe of TPM values into a matrix and save the file to share (providing an alternative format for anyone who wants to use it). I could also normalize the data (i.e., log transform), but I'll save that for the analysis steps.
+
+#### Save expression matrix file
+
+```{r}
+pson_expr_tpm_mat_file <- "../data/pson_expr_tpm_mat.RData"
+if (!fs::file_exists(pson_expr_tpm_mat_file)) {
+  pson_expr_tpm_mat <- pson_expr_tpm_df %>% 
+    column_to_rownames("gene_id") %>% 
+    as.matrix()
+  save(pson_expr_tpm_mat, file = pson_expr_tpm_mat_file)
+} else {
+  load(pson_expr_tpm_mat_file)
+}
+```
+
+
+### Motility data 
+
+I happen to know from some earlier inspection of the motility data that scales for average values are fairly different across cell lines. I'll keep the original values in the dataframe, but add *centered and scaled* versions (using the `scale()` function). I'll save the augmented dataframe as `"pson_motility_tidy_df.RData"` and use this for analysis below.
+
+```{r, warning=FALSE}
+scale_this <- function(x) as.vector(scale(x))
+
+pson_motil_tidy_file <- "../data/pson_motility_tidy_df.RData"
+if (!fs::file_exists(pson_motil_tidy_file)) {
+  # scale and center motility measurement data
+  pson_motil_tidy_df <- pson_motil_summary_df %>%
+    group_by(cellLine, summary_metric) %>% 
+    mutate(average_value_scaled = scale_this(average_value)) %>%
+    ungroup()
+  save(pson_motil_tidy_df, file = pson_motil_tidy_file)
+  # also save TSV
+  write_tsv(pson_motil_tidy_df, 
+            path = str_replace(pson_motil_tidy_file, "RData", "tsv"))
+} else {
+  load(pson_motil_tidy_file)
+}
+```
+
+---
+
+## Exploratory data analysis
+
+Checking out trends and distributions for motility and expression data.
+
+### Cell line motility overview
+
+I'll do a bit of formatting and arranging to control the order in which cell lines and cancer types are plotted (to hopefully make trends easier to see).
+
+```{r}
+# format motility data for plotting (set up factors for axis ordering, etc.)
+plot_df <- pson_motil_tidy_df %>%
+  group_by(diagnosis, cellLine) %>% 
+  mutate(
+    cv_scaled_value = sd(average_value_scaled) / mean(average_value_scaled)
+  ) %>% 
+  ungroup() %>% 
+  arrange(desc(cv_scaled_value)) %>% 
+  replace_na(list(stiffness_norm = "NA", laminate = "NA")) %>% 
+  mutate(diagnosis = fct_inorder(diagnosis),
+         diagnosis = fct_relevel(diagnosis, "Not Applicable", after = Inf)) %>% 
+  arrange(as.integer(diagnosis)) %>% 
+  mutate(cellLine = fct_inorder(cellLine))
+```
+
+As a quick sanity check, I'll verify that I can reproduce the plot I previously made in the `motility_brca.R` script:
+
+```{r}
+plot_df %>% 
+  filter(diagnosis %in% c("Breast Cancer")) %>%
+  ggplot(aes(x = cellLine, y = average_value)) +
+  geom_col(aes(fill = laminate, alpha = stiffness_norm), 
+           position = position_dodge(0.9)) +
+  geom_errorbar(
+    aes(ymin = average_value - standard_error, 
+        ymax = average_value + standard_error, 
+        color = laminate, 
+        alpha = stiffness_norm), 
+    size = 0.5, width = 0.25, position = position_dodge(0.9)
+  ) +
+  scale_alpha_manual("stiffness [kPa]", values = c(0.3, 1, 1)) +
+  scale_color_manual(values = c("black", "black", "black")) +
+  scale_fill_brewer(palette = "Set1") +
+  facet_grid(summary_metric ~ surface, scales = "free_y") +
+  labs(title = "Average motility measures vs. surface") +
+  xlab("cell line") +
+  ylab("") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### Average values
+
+While I don't have a strong justification, I've decided up front that I'm not interested in the "end-to-end distance" (`end_to_end_distance_um`) summary measure for motility. With that, I still have **2** summary metrics for **9** cell lines, categorized into **6** diagnoses / cancer types, across **7** conditions. That's a lot of information to capture in one plot but I'll try to work with heatmaps. The `patchwork` package comes in handy here for combining panels with different color palettes.
+
+```{r}
+p_speed <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average speed [um/hr]") + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank()) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_dist <- plot_df %>% 
+  filter(summary_metric == "total_distance_um") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average distance [um]", option = 3) + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank(),
+        plot.margin = margin(t = -10)) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_diag <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = 1)) + 
+  geom_tile(aes(fill = diagnosis), colour = "white", size = 0.2) + 
+  scale_fill_manual(values = diagnosis_colors) +
+  ylab("") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.margin = margin(t = 80),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.key.size = ggplot2::unit(8, "pt"),
+        legend.text = element_text(size = 8),
+        strip.text.x = element_blank(),
+        plot.margin = margin(t = -5, b = 10)) +
+  facet_grid(. ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_comb <- p_speed + p_dist + p_diag + 
+  plot_layout(ncol = 1, heights = c(20, 20, 2.5))
+p_comb
+```
+
+#### Scaled and centered
+
+As expected, the differing scales of motility metrics across conditions for each cell line make it tough to discern any patterns. I'll try again with the centered and scaled average values. **Note:** this is admittedly a lot of duplicated code to produce a plot with only minor changes in content.
+
+```{r}
+p_diag <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = 1)) + 
+  geom_tile(aes(fill = diagnosis), colour = "white", size = 0.2) + 
+  scale_fill_manual(values = diagnosis_colors) +
+  scale_x_discrete(position = "top") + 
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.margin = margin(t = -60),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.key.size = ggplot2::unit(8, "pt"),
+        legend.text = element_text(size = 8),
+        strip.text.x = element_blank(),
+        plot.margin = margin(t = -5, b = 10)) +
+  facet_grid(. ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_speed <- plot_df %>% 
+  filter(summary_metric == "speed_um_hr") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value_scaled), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average speed* [um/hr]") + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank()) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+p_dist <- plot_df %>% 
+  filter(summary_metric == "total_distance_um") %>% 
+  ggplot(aes(x = cellLine, y = experimentalCondition)) + 
+  geom_tile(aes(fill = average_value_scaled), colour = "white", size = 0.2) + 
+  scale_fill_viridis_c("Average distance* [um]", option = 3) + 
+  guides(fill = guide_colorbar(direction = "horizontal", 
+                               title.position = "top")) +
+  xlab("") + 
+  ylab("") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 10, face = "bold"),
+        strip.text.x = element_blank(),
+        strip.text.y = element_blank(),
+        plot.margin = margin(b = 10)) +
+  facet_grid(surface ~ summary_metric, scales = "free_y", space = "free_y")
+
+
+
+p_comb <- p_diag + p_speed + p_dist + 
+  plot_layout(ncol = 1, heights = c(2.5, 20, 20)) +
+  labs(caption = "* centered and scaled")
+p_comb
+```
+
+Still nothing as obvious or pronounced as I might have hoped. For example, none of the conditions seem to be universally associated with increased (or decreased) motility relative to the others — even "glass" is the lowest value for some cell lines and the highest for others. I guess the takeaway is that motility regulation and response is cell-type specific — though there might be common drivers on the molecular level.
+
+#### Motility vs. condition
+
+Here's a different way to look at possible trends of cell line motility with respect to experimental condition:
+
+```{r}
+pson_motil_tidy_df %>% 
+  filter(summary_metric != "end_to_end_distance_um") %>% 
+  mutate(experimentalCondition = fct_rev(experimentalCondition),
+         experimentalCondition = fct_relevel(experimentalCondition, "Glass")) %>% 
+  ggplot(aes(x = experimentalCondition, y = average_value)) + 
+  geom_point(aes(colour = diagnosis)) +
+  geom_line(aes(colour = diagnosis, group = cellLine)) +
+  ggrepel::geom_label_repel(
+    data = pson_motil_tidy_df %>%  
+      filter(experimentalCondition == "30 kPa polyacrylamide Collagen",
+             summary_metric != "end_to_end_distance_um"),
+    aes(label = cellLine),
+    size = 3, nudge_y = 5, alpha = 0.7, label.padding = unit(0.1, "lines")
+  ) +
+  scale_colour_manual(values = diagnosis_colors) + 
+  guides(colour = FALSE) +
+  facet_grid(summary_metric ~ diagnosis, scales = "free") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8))
+```
+
+#### Distributions
+
+This is a quick check to see how motility metric values are distributed across conditions for each cell line. I'm looking for some semblance of normality, though the sample size is fairly small. I'll likely check associations with both parameteric and non-parametric methods below, just to be safe.
+
+```{r}
+pson_motil_tidy_df %>% 
+  ggplot(aes(x = average_value)) +
+  stat_density(aes(colour = cellLine),
+               geom = "line", position = "identity") +
+  scale_color_brewer(palette = "Reds") +
+  facet_wrap(~ summary_metric, scales = "free")
+```
+
+
+### Expression overview
+
+Before analyzing the expression data, I'd like to apply some basic transformations: log-normalizing the TPM expression values and removing/filtering low or rarely expressed genes. 
+
+```{r}
+expr_filter_df <- pson_expr_tpm_df %>% 
+  gather(sample, tpm, -gene_id) %>% 
+  mutate(log_tpm = log(tpm + 1)) %>% 
+  group_by(gene_id) %>% 
+  summarize(n_expr = sum(log_tpm > 0), 
+            avg_expr = mean(log_tpm),
+            # formula for ~CV for log-normalized data, according to Wikipedia
+            cv_expr = sqrt(exp(sd(log_tpm) ^ 2) - 1)) %>% 
+  ungroup() %>% 
+  mutate(rare = n_expr < max(n_expr) / 2,
+         low = avg_expr < 1,
+         rare_or_low = rare | low)
+
+expr_filter_df %>% 
+  ggplot(aes(x = n_expr, y = avg_expr)) +
+  geom_point(aes(colour = rare_or_low), alpha = 0.5) +
+  scale_color_colorblind()
+```
+
+**Note:** I'll write a simple function for this step, so I can apply the same filtering for subsets of the data.
+
+```{r}
+log_and_filter_genes <- function(expr_tpm_melted_df) {
+  keep_genes <- expr_tpm_melted_df %>% 
+    mutate(log_tpm = log(tpm + 1)) %>% 
+    group_by(gene_id) %>% 
+    summarize(n_expr = sum(log_tpm > 0), 
+              avg_expr = mean(log_tpm),
+              # formula for ~CV for log-normalized data, according to Wikipedia
+              cv_expr = sqrt(exp(sd(log_tpm) ^ 2) - 1)) %>% 
+    ungroup() %>% 
+    mutate(rare = n_expr < max(n_expr) / 2,
+           low = avg_expr < 1,
+           rare_or_low = rare | low) %>% 
+    filter(!rare_or_low) %>% 
+    pluck("gene_id")
+    
+    expr_tpm_melted_df %>% 
+      filter(gene_id %in% keep_genes) %>% 
+      mutate(logtpm = log(tpm + 1))
+}
+```
+
+
+```{r}
+pson_expr_logtpm_df <- pson_expr_tpm_df %>% 
+  gather(sample, tpm, -gene_id) %>% 
+  log_and_filter_genes()
+```
+
+The subsetted expression dataframe `pson_expr_logtpm_df` contains `r nrow(pson_expr_logtpm_df)` genes. I can take a random sample (100 genes) again to check for ~normality.
+
+```{r}
+set.seed(0)
+pson_expr_logtpm_df %>% 
+  group_by(gene_id) %>% 
+  nest() %>% 
+  sample_n(100) %>% 
+  unnest() %>% 
+  ggplot(aes(x = logtpm)) +
+  stat_density(aes(group = gene_id), 
+               geom = "line", position = "identity", alpha = 0.2)
+```
+
+Looks like a bunch of Guassian-ish curves to me, so that's encouraging.
+
+---
+
+## Motility-expression correlation
+
+Below, I'll take a look at correlation between gene expression and motility metrics in PS-ON cell lines from a few different perspectives:
+
+1. Across all cell lines and cancer types (diagnoses)
+2. Across all cell lines within each cancer type
+3. Across each breast cancer cell line
+
+### Across all cell lines
+
+To ease some of the operations below, I'll build a nested dataframe where, for each gene and summary metric, the `data` column stores a dataframe with expression values and average motility values across all cell lines and conditions.
+
+```{r}
+nest_expr_motil_data <- function(expr_logtpm_df, facet = NULL) {
+  groupvars <- c("gene_id", "summary_metric")
+  joinvars <- c("sample")
+  if (!is.null(facet)) {
+    groupvars <- c(groupvars, facet)
+    joinvars <- c(joinvars, facet)
+  } else {
+    facet <- ""
+  }
+  expr_logtpm_df %>% 
+    left_join(
+      pson_motil_tidy_df %>% 
+        filter(!(summary_metric %in% "end_to_end_distance_um")) %>%
+        select(sample, experimentalCondition, one_of(facet),
+               summary_metric, average_value_scaled),
+      by = joinvars
+    ) %>% 
+    filter(!is.na(experimentalCondition)) %>%
+    select(gene_id, logtpm, summary_metric, average_value_scaled,
+           experimentalCondition, one_of(facet)) %>%
+    group_by(.dots = groupvars) %>%
+    nest() %>%
+    ungroup()
+}
+
+# build master dataframe for inspecting expression ~ motility trends
+pson_expr_motil_df <- nest_expr_motil_data(pson_expr_logtpm_df)
+```
+
+Using the `pson_expr_motil_df` "master" dataframe, I can iterate across all genes to compute the correlation between expression and motility values across conditions. To clarify what this looks like for a single gene:
+
+```{r}
+p1 <- pson_expr_motil_df %>% 
+  slice(1) %>% 
+  unnest(data) %>% 
+  ggplot(aes(x = logtpm, y = average_value_scaled)) + 
+  geom_point() +
+  geom_smooth(method = "lm") +
+  ylab("speed_um_hr")
+p1 <- ggMarginal(p1)
+```
+
+```{r}
+grid::grid.newpage()
+grid::grid.draw(p1)
+```
+
+
+```{r, warning=FALSE}
+calc_genewise_corr <- function(expr_motil_df) {
+  expr_motil_corr_df <- expr_motil_df %>% 
+    mutate(
+      pearson = map(
+        data, 
+        ~ cor.test(.$logtpm, .$average_value_scaled, 
+                   method = "pearson") %>% 
+          tidy() %>% 
+          dplyr::rename_all(.funs = ~str_c("pearson_", .))
+      ),
+      spearman = map(
+        data, 
+        ~ cor.test(.$logtpm, .$average_value_scaled, 
+                   method = "spearman", exact = FALSE) %>% 
+          tidy() %>% 
+          dplyr::rename_all(.funs = ~str_c("spearman_", .))
+      )
+    ) %>% 
+    select(-data)
+  
+  groupvars <- setdiff(
+    names(expr_motil_corr_df), 
+    c("gene_id", "pearson", "spearman")
+  )
+  print(groupvars)
+  # # unnest and adjust for multiple testing
+  expr_motil_corr_df %>%
+    unnest(pearson) %>%
+    unnest(spearman) %>% 
+    group_by(.dots = groupvars) %>%
+    mutate_at(.vars = vars(matches(".*_p.value")),
+              .funs = funs(adj = p.adjust(., method = "BH"))) %>%
+    ungroup()
+}
+
+# compute correlation across cell lines and conditions for all genes
+expr_motil_corr_all_df <- calc_genewise_corr(pson_expr_motil_df)
+```
+
+Ideally, I'd like to find genes that are significantly correlated with motility after correcting for multiple hypothesis testing (i.e., Benjamini-Hochberg). Filtering for genes with adjusted p-value < 0.05, I get...
+
+```{r}
+expr_motil_corr_all_df
+```
+
+
+```{r, message=FALSE}
+expr_motil_corr_all_sig_df <- expr_motil_corr_all_df %>% 
+  filter_at(.vars = vars(matches(".*_p.value_adj")),
+            .vars_predicate = any_vars(. < 0.05))
+expr_motil_corr_all_sig_df
+```
+
+...nothing significant. Let's try to look at unadjusted p-values.
+
+```{r}
+expr_motil_corr_all_sig_df <- expr_motil_corr_all_df %>% 
+  filter_at(.vars = vars(matches(".*_p.value")),
+            .vars_predicate = any_vars(. < 0.05)) %>% 
+  select(gene_id, summary_metric, 
+         pearson = pearson_estimate, spearman = spearman_estimate) %>% 
+  gather(corr_type, corr, pearson, spearman) %>% 
+  left_join(select(gene_df, gene_name = symbol, everything()), by = "gene_id")
+expr_motil_corr_all_sig_df
+```
+
+With this view, we still get `r n_distinct(expr_motil_corr_all_sig_df$gene_id)` genes that are correlated with *either* speed or distance based on *either* Pearson or Spearman correlation. Taking a look at these genes:
+
+```{r}
+expr_motil_corr_all_sig_df %>% 
+  ggplot(aes(x = gene_name, y = corr_type)) +
+  geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
+  scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
+  ylab("") +
+  xlab("") +
+  facet_grid( ~ summary_metric, 
+             scales = "free_x", space = "free_x", drop = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        legend.position = "top",
+        strip.text.y = element_text(angle = 0, size = 6)) +
+  labs(title = "Genes significantly* correlated with motility",
+       subtitle = "(across all cell lines within each cancer type)",
+       caption = "* p-value < 0.05 (not adjusted for multiple testing)")
+```
+
+
+### For each cancer type
+
+Taking a slightly more granular approach, I'll look at gene-motility correlation across cell lines for each cancer type.
+
+```{r}
+# build master dataframe for inspecting expression ~ motility trends
+pson_expr_motil_diag_df <- pson_expr_tpm_df %>%
+  gather(sample, tpm, -gene_id) %>% 
+  left_join(select(sample_map_df, sample, diagnosis), by = "sample") %>% 
+  group_by(diagnosis) %>% 
+  nest() %>% 
+  mutate(data = map(data, log_and_filter_genes)) %>% 
+  unnest(data) %>% 
+  nest_expr_motil_data(facet = "diagnosis")
+```
+
+The principle here is pretty much the same, but with fewer points in each of the distributions that I'm comparing (at the same time, there's less noise due to cell type specific effects, so we can generally expect to see correlation values with greater magnitude.)
+
+```{r}
+p2 <- pson_expr_motil_diag_df %>% 
+  slice(1) %>% 
+  unnest(data) %>% 
+  ggplot(aes(x = logtpm, y = average_value_scaled)) + 
+  geom_point() +
+  geom_smooth(method = "lm") +
+  ylab("speed_um_hr")
+p2 <- ggMarginal(p2)
+```
+
+```{r}
+grid::grid.newpage()
+grid::grid.draw(p2)
+```
+
+
+```{r, warning=FALSE}
+# compute correlation across cell lines and conditions for all genes and all
+# cancer types
+expr_motil_corr_diag_df <- calc_genewise_corr(pson_expr_motil_diag_df)
+```
+
+Now, genes that are significantly correlated with motility after correcting for multiple hypothesis testing (i.e., BH-adjusted p-value):
+
+```{r, message=FALSE}
+expr_motil_corr_diag_sig_df <- expr_motil_corr_diag_df %>% 
+  filter_at(.vars = vars(matches(".*_p.value_adj")),
+            .vars_predicate = any_vars(. < 0.05)) %>% 
+  select(gene_id, summary_metric, diagnosis,
+         pearson = pearson_estimate, spearman = spearman_estimate) %>% 
+  gather(corr_type, corr, pearson, spearman) %>% 
+  left_join(select(gene_df, gene_name = symbol, everything()), by = "gene_id")
+expr_motil_corr_diag_sig_df
+```
+
+An impressive `r n_distinct(expr_motil_corr_diag_sig_df$gene_id)` gene(s) correlated with *either* speed or distance based on *either* Pearson or Spearman correlation within ***any*** cancer type. 
+
+```{r}
+expr_motil_corr_diag_sig_df %>% 
+  ggplot(aes(x = gene_name, y = corr_type)) +
+  geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
+  scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
+  ylab("") +
+  xlab("") +
+  facet_grid(diagnosis ~ summary_metric, 
+             scales = "free_x", space = "free_x", drop = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        legend.position = "top",
+        strip.text.y = element_text(angle = 0, size = 6)) +
+  labs(title = "Genes significantly* correlated with motility",
+       subtitle = "(across all cell lines within each cancer type)",
+       caption = "* BH-adjusted p-value < 0.05")
+```
+
+#### Across breast cancer cell lines
+
+These are the same results as above, but focusing in on the genes that appear to be correlated with motility across breast cancer cell lines (and not correcting for multiple testing).
+
+```{r}
+expr_motil_corr_diag_brca_sig_df <- expr_motil_corr_diag_df %>% 
+  filter(diagnosis == "Breast Cancer") %>% 
+  filter_at(.vars = vars(matches(".*_p.value")),
+            .vars_predicate = any_vars(. < 0.01)) %>% 
+  select(gene_id, summary_metric, diagnosis,
+         pearson = pearson_estimate, spearman = spearman_estimate) %>%
+  gather(corr_type, corr, pearson, spearman) %>%
+  left_join(select(gene_df, gene_name = symbol, everything()), by = "gene_id")
+expr_motil_corr_diag_brca_sig_df
+```
+
+```{r}
+expr_motil_corr_diag_brca_sig_df %>% 
+  ggplot(aes(x = gene_name, y = corr_type)) +
+  geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
+  scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
+  ylab("") +
+  xlab("") +
+  facet_grid(diagnosis ~ summary_metric, 
+             scales = "free_x", space = "free_x", drop = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        legend.position = "top",
+        strip.text.y = element_text(angle = 0, size = 6)) +
+  labs(title = "Genes significantly* correlated with motility",
+       subtitle = "(across all breast cancer cell lines)",
+       caption = "* p-value < 0.01 (not adjusted for multiple testing)")
+```
+
+### For each breast cancer cell line
+
+#### Save data for breast cancer cell lines only
+
+While we're here... I'll create some new files with just the motility and expression data for breast cancer cell lines in the PS-ON portal.
+
+```{r}
+brca_sample_map_df <- sample_map_df %>%
+  filter(diagnosis == "Breast Cancer")
+brca_motil_tidy_df <- pson_motil_tidy_df %>% 
+  filter(diagnosis == "Breast Cancer")
+brca_expr_tpm_df <- pson_expr_tpm_df %>% 
+  select(gene_id, one_of(brca_sample_map_df$sample))
+brca_expr_tpm_mat <- brca_expr_tpm_df %>% 
+    column_to_rownames("gene_id") %>% 
+    as.matrix()
+
+save(brca_sample_map_df, file = "../data/pson_brca_sample_map_df.RData")
+write_tsv(brca_sample_map_df, "../data/pson_brca_sample_map_df.tsv")
+
+save(brca_motil_tidy_df, file = "../data/pson_brca_motility_tidy_df.RData")
+write_tsv(brca_motil_tidy_df, "../data/pson_brca_motility_tidy_df.tsv")
+
+save(brca_expr_tpm_df, file = "../data/pson_brca_expr_tpm_df.RData")
+write_tsv(brca_expr_tpm_df, "../data/pson_brca_expr_tpm_df.tsv")
+
+save(brca_expr_tpm_mat, file = "../data/pson_brca_expr_tpm_mat.RData")
+```
+
+
+Taking a slightly more granular approach, I'll look at gene-motility correlation across cell lines for each cancer type.
+
+```{r}
+brca_expr_motil_cellline_df <- pson_expr_tpm_df %>%
+  gather(sample, tpm, -gene_id) %>% 
+  left_join(select(sample_map_df, sample, diagnosis, cellLine), 
+            by = "sample") %>% 
+  filter(diagnosis == "Breast Cancer") %>%
+  group_by(cellLine) %>%
+  nest() %>%
+  mutate(data = map(data, log_and_filter_genes)) %>%
+  unnest(data) %>%
+  nest_expr_motil_data(facet = "cellLine")
+```
+
+Even fewer points in each of the distributions that I'm comparing (**1** per experimental condition in both the motility and expression data) — higher likeliyhood of finding stronger correlation, but definitely less statistical power.
+
+```{r}
+p3 <- brca_expr_motil_cellline_df %>% 
+  slice(1) %>% 
+  unnest(data) %>% 
+  ggplot(aes(x = logtpm, y = average_value_scaled)) + 
+  geom_point() +
+  geom_smooth(method = "lm") +
+  ylab("speed_um_hr")
+p3 <- ggMarginal(p3)
+```
+
+```{r}
+grid::grid.newpage()
+grid::grid.draw(p3)
+```
+
+```{r, warning=FALSE}
+# compute correlation across cell lines and conditions for all genes and all
+# cancer types
+brca_expr_motil_corr_cellline_df <- calc_genewise_corr(brca_expr_motil_cellline_df)
+```
+
+Any genes significantly correlated with motility after correcting for multiple hypothesis testing (BH-adjusted p-value)?
+
+```{r}
+brca_expr_motil_corr_cellline_sig_df <- brca_expr_motil_corr_cellline_df %>% 
+  filter_at(.vars = vars(matches(".*_p.value_adj")),
+            .vars_predicate = any_vars(. < 0.05)) %>% 
+  select(gene_id, summary_metric, cellLine,
+         pearson = pearson_estimate, spearman = spearman_estimate) %>%
+  gather(corr_type, corr, pearson, spearman) %>%
+  left_join(select(gene_df, gene_name = symbol, everything()), by = "gene_id")
+brca_expr_motil_corr_cellline_sig_df
+```
+
+Not much. Relaxing the threshold a bit further now (unadjusted p-value < 0.05):
+
+```{r}
+brca_expr_motil_corr_cellline_sig_df <- brca_expr_motil_corr_cellline_df %>% 
+  filter_at(.vars = vars(matches(".*_p.value")),
+            .vars_predicate = any_vars(. < 0.001)) %>% 
+  select(gene_id, summary_metric, cellLine,
+         pearson = pearson_estimate, spearman = spearman_estimate) %>%
+  gather(corr_type, corr, pearson, spearman) %>%
+  left_join(select(gene_df, gene_name = symbol, everything()), by = "gene_id")
+brca_expr_motil_corr_cellline_sig_df
+```
+
+```{r}
+brca_expr_motil_corr_cellline_sig_df %>% 
+  ggplot(aes(x = gene_name, y = corr_type)) +
+  geom_tile(aes(fill = corr), colour = "white", size = 0.5) +
+  scale_fill_distiller(palette = "PuOr", limits = c(-1, 1)) +
+  ylab("") +
+  xlab("") +
+  facet_grid(cellLine ~ summary_metric, 
+             scales = "free_x", space = "free_x", drop = TRUE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        legend.position = "top",
+        strip.text.y = element_text(angle = 0, size = 6)) +
+  labs(title = "Genes significantly* correlated with motility",
+       subtitle = "(for each breast cancer cell line)",
+       caption = "* p-value < 0.001 (not adjusted for multiple testing)")
+```
+
+Notably, not much overlap (and in some cases contrasting patterns) between the two cell lines.
+
+---
+
+## Session Info
+
+```{r}
+sessionInfo()
+```
+
+

@@ -1,0 +1,115 @@
+---
+title: "RStudio & R Notebooks Overview"
+author: "James Eddy — Sage Bionetworks"
+date: "June 7, 2018"
+output: 
+  revealjs::revealjs_presentation:
+    theme: sky
+    reveal_options:
+      slideNumber: true
+      width: 1260
+      height: 720
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# RStudio
+
+## What is RStudio? 
+
+- **RStudio** is an Integrated Development Environment (IDE): create, view, and explore code, variables, files, plots, etc. all in one application
+
+
+```{r out.width="400px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio.png")
+```
+
+- RStudio also provides lots of helpful features and packages that make writing R code easier
+
+## RStudio — Layout
+
+When you start RStudio, you will get a view similar to what is shown below with perhaps slight differences.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio-home.png")
+```
+
+## RStudio — Help
+
+A lot of information is available in RStudio in the (searchable) help tab — feel free to investigate.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio-help.png")
+```
+
+## RStudio — Commands
+
+You can type commands directly into the console.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio-command1.png")
+```
+
+## RStudio — Workspace
+
+Outputs will be saved in the current workspace.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio-command2.png")
+```
+
+## RStudio — R Notebooks
+
+mini-DREAM activities are based in **R Notebooks**, which have `.Rmd` ... more on this in **Activity 0**.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio-notebook.png")
+```
+
+## RStudio — R Notebooks
+
+For each activity, you'll read along and run sections of code in "chunks".
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rnotebook-chunk1.png")
+```
+
+## RStudio — R Notebooks
+
+Output from each chunk will be displayed directly below the code, and saved in the workspace.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rnotebook-chunk2.png")
+```
+
+## RStudio — R Notebooks
+
+You can inspect the contents of outputs by clicking on object names.
+
+```{r out.width="650px", out.extra='style="background:none; border:none;"', echo=FALSE}
+knitr::include_graphics("img/rstudio-workspace.png")
+```
+
+
+# What next?
+
+## **Module 0 Activity**
+
+- Navigate to [**Challenge Modules — Module 0**](https://www.synapse.org/#!Synapse:syn12105406/wiki/527879) on the mini-DREAM Synapse site for more info:
+
+&nbsp;
+
+https://www.synapse.org/#!Synapse:syn12105406/wiki/527879
+
+&nbsp;
+
+- Next week (Tues. 6/12 and Thurs. 6/14) — **Module 1** with Andrew Gentles:
+
+&nbsp;
+
+> **Programming and modeling for life sciences**
+
+ 
+

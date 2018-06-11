@@ -1,0 +1,27 @@
+title: CSBC/PS-ON Breast Cancer Metastasis mini-DREAM Challenge
+subtitle: Statistical & Mechanistic Modeling of Cell Line and Patient Data
+source: https://github.com/Sage-Bionetworks/minidream-challenge-2018
+project_site: https://www.synapse.org/#!Synapse:syn12105406
+description: |
+   In this course, we will use breast cancer data and questions to introduce 
+   basic concepts of data analysis to undergraduate students. We'll explore 
+   multiple approaches to characterize cell motility, breast cancer metastasis, 
+   and the relationship between these processes. 
+   
+   Students will learn about breast cancer and its molecular basis and gain 
+   basic skills in the manipulation and analysis of different data types. 
+   Students will get the chance to work with real datasets from large 
+   scientific projects: breast cancer cell line motility and genomic data from 
+   the PS-ON Cell Line Characterization study; and breast cancer patient 
+   clinical and genomic data from The Cancer Genome Atlas (TCGA).
+modules:
+  - module0:
+      presentation: rstudio-overview.html
+      presentation_src: rstudio-overview.Rmd
+      activity: rstudio-overview_activity.nb.html
+      activity_src: rstudio-overview_activity.Rmd
+  - module1:
+      presentation: working-with-genomics-data.pptx
+      presentation_src: 
+      activity: working-with-genomics-data_activity.nb.html
+      activity_src: working-with-genomics-data_activity.Rmd

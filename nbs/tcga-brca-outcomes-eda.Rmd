@@ -1,0 +1,256 @@
+---
+title: "TCGA BRCA Data Exploration"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(GenomicDataCommons)
+library(tidyverse)
+library(synapser)
+library(stringr)
+library(janitor)
+library(ggthemes)
+library(patchwork)
+library(ggalluvial)
+library(forcats)
+library(annotables)
+
+synLogin()
+```
+
+## Data collection
+
+### Clinical data
+
+I'll grab TCGA clinical data from the PanCancer Atlas space in the Genomic Data Commons (GDC). **Note:** I manually downloaded the "GDC Manifest File" from [this page](https://gdc.cancer.gov/about-data/publications/pancanatlas).
+
+```{r}
+# load TCGA PanCanAtlas manifest for GDC
+manifest_df <- read_tsv("../data/PanCan-General_Open_GDC-Manifest_0.txt")
+```
+
+The TCGA-Clinical Data Resource (CDR) Outcomes is a "curated resource of the clinical annotations for TCGA data and provides recommendations for use of clinical endpoints." According to the PanCanAtlas page in GDC, "it is strongly recommended that this file be used for clinical elements and survival outcome data first."
+
+```{r, warning=FALSE, include=FALSE}
+tcga_cdr_clinical_file <- manifest_df %>% 
+  dplyr::filter(filename == "TCGA-CDR-SupplementalTableS1.xlsx") %>% 
+  pluck("id") %>% 
+  gdcdata(destination_dir = "../data/")
+```
+
+I'll subset the data to only include samples from breast cancer (BRCA) studies. To reduce the amount of extraneous information, I'll also remove any variables that are `"Not Applicable"` or `"Not Available"` in more than 25% of BRCA samples.
+
+```{r, warning=FALSE}
+brca_cdr_clinical_df <- readxl::read_excel(tcga_cdr_clinical_file) %>% 
+  filter(type == "BRCA") %>% 
+  select(-X__1)
+
+sparse_vars <- brca_cdr_clinical_df %>%
+  summarise_all(.funs = funs(sum(str_detect(., "^\\[Not A.*") | is.na(.)))) %>% 
+  gather(variable, n_uninformative) %>% 
+  dplyr::filter(n_uninformative > (nrow(brca_cdr_clinical_df) * 0.25)) %>% 
+  pluck("variable")
+
+brca_cdr_clinical_df <- select(brca_cdr_clinical_df, -one_of(sparse_vars))
+```
+
+Here's a glimpse of the information included in `brca_cdr_clinical_df`:
+
+```{r}
+summary(brca_cdr_clinical_df)
+```
+
+Unfortunately not much that obviously relates to metastasis. Per discussions with other members of the mini-DREAM planning committee, it sounds like "TMN Stage" might be a more relevant variable — and this is included in the "Clinical with Follow-up" TCGA PanCanAtlas data:
+
+```{r, warning=FALSE, include=FALSE}
+tcga_clinical_file <- manifest_df %>% 
+  dplyr::filter(filename == "clinical_PANCAN_patient_with_followup.tsv") %>% 
+  pluck("id") %>% 
+  gdcdata(destination_dir = "../data/")
+```
+
+Applying the same sample and variable subsetting as above...
+
+```{r, warning=FALSE, message=FALSE}
+brca_clinical_df <- read_tsv(tcga_clinical_file, progress = FALSE) %>% 
+  filter(acronym == "BRCA")
+
+sparse_vars <- brca_clinical_df %>%
+  summarise_all(.funs = funs(sum(str_detect(., "^\\[Not A.*") | is.na(.)))) %>% 
+  gather(variable, n_uninformative) %>%  
+  dplyr::filter(n_uninformative > (nrow(brca_clinical_df) * 0.25)) %>% 
+  pluck("variable")
+
+brca_clinical_df <- select(brca_clinical_df, -one_of(sparse_vars))
+```
+
+There's a bit more information here (`r ncol(brca_clinical_df)`) variables), including `pathologic_M` and `pathologic_N` designations for TMN stage.
+
+```{r}
+summary(brca_clinical_df)
+```
+
+It might be worth joining these two tables into one... but I'll keep them separate for now.
+
+### Expression data
+
+The same expression data is available through both GDC and Synapse. From experience, I've found that downloading the data from Synapse is quite a bit faster, so I'll use that. Here's where the data can be found:
+
++ **Batch effects normalized mRNA data:** `syn4976363`
+  + `syn4976369` (`"EB++AdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv"`)
+  
+Because loading and formatting the expression data is still computationally intensive and takes some time, I'll include those steps here and save the result to `tcga_brca_expr_norm_df.RData` (and `tcga_brca_expr_gene_info.RData`) to speed things up on subsequent runs.
+
+**Note:** I'll use the `annotables` package to augment the provided Entrez gene IDs with some additional field to provide more context: 
+
++ `ensgene` (which I'll rename to `gene_id` to match the PS-ON data): Ensembl gene ID
++ `symbol`: HGNC gene symbol
++ `biotype`: Protein coding, pseudogene, mitochondrial tRNA, etc.
++ `description`: Full gene name/description
+
+```{r include=FALSE}
+brca_expr_norm_file <- "../data/tcga_brca_expr_norm_df.RData"
+if (!fs::file_exists(brca_expr_norm_file)) {
+  # download and load normalized, batch-corrected expression data
+  tcga_expr_norm_file <- synGet("syn4976369", downloadLocation = "../data/",
+                                ifcollision = "overwrite.local")
+   tcga_expr_norm_df <- read_tsv(tcga_expr_norm_file$path, progress = FALSE)
+  
+  # load IRWG feature matrix for barcode mapping
+  irwg_fmx_file <- synGet("syn11187757",  downloadLocation = "../data/",
+                          ifcollision = "overwrite.local")
+  load(irwg_fmx_file$path)
+  irwg_fmx_df <- df %>% 
+    mutate_if(is.factor, as.character)
+  rm(df)
+  
+  brca_barcode_map <- irwg_fmx_df %>% 
+    dplyr::filter(Study == "BRCA") %>% 
+    dplyr::select(
+      ParticipantBarcode,
+      AliquotBarcode = Representative_Expression_Matrix_AliquotBarcode
+    ) %>% 
+    dplyr::filter(AliquotBarcode %in% names(tcga_expr_norm_df)) %>% 
+    deframe()
+  
+  # subset expression data with only BRCA samples
+  brca_expr_norm_df <- tcga_expr_norm_df[, c("gene_id", brca_barcode_map)] %>% 
+    dplyr::rename(!!!brca_barcode_map) %>% 
+    tidyr::separate(gene_id, c("symbol", "entrez"), sep = "\\|")
+  
+  # update/augment gene identifiers; subset to protein coding genes ; 
+  # remove duplicate IDs
+  gene_df <- brca_expr_norm_df %>%
+    dplyr::select(entrez) %>% 
+    mutate(entrez = as.integer(entrez)) %>% 
+    left_join(grch37, by = "entrez") %>% 
+    filter(biotype == "protein_coding") %>% 
+    dplyr::select(gene_id = ensgene, entrez, symbol, biotype, description) %>% 
+    filter(!duplicated(entrez) & !duplicated(gene_id))
+
+  # remove genes with no Ensembl ID
+  brca_expr_norm_df <- brca_expr_norm_df %>% 
+    select(-symbol) %>% 
+    mutate(entrez = as.integer(entrez)) %>% 
+    left_join(dplyr::select(gene_df, gene_id, entrez), by = "entrez") %>% 
+    select(gene_id, everything()) %>% 
+    select(-entrez) %>% 
+    filter(!is.na(gene_id))
+  
+  # make sure gene info lines up with expression data
+  gene_df <- gene_df %>% 
+    dplyr::filter(gene_id %in% brca_expr_norm_df$gene_id)
+  
+  save(brca_expr_norm_df, file = brca_expr_norm_file)
+  # also save TSV
+  write_tsv(brca_expr_norm_df, 
+            path = str_replace(brca_expr_norm_file, "RData", "tsv"))
+  
+  save(gene_df, file = "../data/tcga_brca_expr_gene_info.RData")
+  # also save TSV
+  write_tsv(gene_df, path = "../data/tcga_brca_expr_gene_info.tsv")
+} else {
+  load(brca_expr_norm_file)
+  load("../data/tcga_brca_expr_gene_info.RData")
+}
+```
+
+---
+
+## Data formatting
+
+### Expression data
+
+For the expression data, I'll just convert the dataframe of normalized values into a matrix and save the file to share (providing an alternative format for anyone who wants to use it). I'll save normalization and filtering of the data (e.g., log transform, gene filtering), for downstream analysis steps.
+
+#### Save expression matrix file
+
+```{r}
+tcga_brca_expr_norm_mat_file <- "../data/tcga_brca_expr_norm_mat.RData"
+if (!fs::file_exists(tcga_brca_expr_norm_mat_file)) {
+  brca_expr_norm_mat <- brca_expr_norm_df %>% 
+    column_to_rownames("gene_id") %>% 
+    as.matrix()
+  save(brca_expr_norm_mat, file = tcga_brca_expr_norm_mat_file)
+} else {
+  load(tcga_brca_expr_norm_mat_file)
+}
+```
+
+### Clinical data
+
+I'll subset the clinical dataframes to match the selection of samples with expression data, then save the results.
+
+```{r}
+brca_clinical_df <- brca_clinical_df %>% 
+  filter(bcr_patient_barcode %in% names(brca_expr_norm_df))
+save(brca_clinical_df, file = "../data/tcga_brca_clinical_df.RData")
+# also save TSV
+write_tsv(brca_clinical_df, path = "../data/tcga_brca_clinical_df.tsv")
+
+brca_cdr_clinical_df <- brca_cdr_clinical_df %>% 
+  filter(bcr_patient_barcode %in% names(brca_expr_norm_df))
+save(brca_cdr_clinical_df, file = "../data/tcga_brca_cdr_clinical_df.RData")
+# also save TSV
+write_tsv(brca_cdr_clinical_df, path = "../data/tcga_brca_cdr_clinical_df.tsv")
+```
+
+
+## Exploratory data analysis
+
+This is a quick look at the distribution of M- and N-stage designations among BRCA patients (and the overlap between designations).
+
+```{r}
+brca_clinical_df %>% 
+  filter_at(.vars = vars(matches("pathologic_[M|N]")), 
+            .vars_predicate = all_vars(!str_detect(., "X"))) %>%
+  mutate(
+    path_tmn_n = if_else(str_detect(pathologic_N, "N0"), "N0", "non-N0"),
+    path_tmn_m = if_else(str_detect(pathologic_M, "M0"), "M0", "non-M0")
+  ) %>% 
+  dplyr::select(path_tmn_n, path_tmn_m) %>%
+  group_by(path_tmn_n, path_tmn_m) %>%
+  tally() %>%
+  ungroup() %>%
+  rownames_to_column("alluvium") %>% 
+  gather(tmn_category, tmn_stage, path_tmn_n, path_tmn_m) %>%
+  mutate(
+    tmn_group = if_else(str_detect(tmn_stage, "non"), "non-0", "0"),
+    tmn_category = fct_inorder(tmn_category)
+  ) %>%
+  ggplot(aes(x = tmn_category, stratum = tmn_stage, alluvium = alluvium, 
+             weight = n, fill = tmn_group, label = tmn_stage)) +
+  geom_flow(colour = "black", width = 1/5) +
+  geom_stratum(alpha = 0.7, width = 1/5) +
+  geom_label(aes(colour = tmn_group), stat = "stratum", size = 3) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_colorblind() + 
+  scale_colour_manual(values = c("white", "black")) +
+  guides(fill = FALSE, colour = FALSE) + 
+  theme_minimal()
+```
+
+
+
