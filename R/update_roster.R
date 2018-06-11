@@ -48,11 +48,17 @@ all_users <- map_df(user_teams, build_member_table, .id = "teamId") %>%
 name_match <- all_users %>% 
   mutate(tmp_name = str_c(firstName, lastName, sep = " ")) %>% 
   filter(!is.na(tmp_name)) %>%
-  stringdist_left_join(roster_df, ., 
-                       by = c("Name" = "tmp_name", "SynapseTeamID" = "teamId"), 
-                       max_dist = 3) %>% 
-  filter(is.na(teamId) | teamId == SynapseTeamID) %>%
-  select(-tmp_name, -teamId)
+  stringdist_left_join(
+    mutate(roster_df, Name = str_replace(Name, "\\(.*\\)", "")), 
+    ., 
+    by = c("Name" = "tmp_name", "SynapseTeamID" = "teamId"), 
+    max_dist = 4) %>% 
+  filter(str_detect(Name, lastName) | is.na(lastName)) %>% 
+  select(-tmp_name, -teamId) %>% 
+  distinct()
+  # nest(teamId) %>% 
+  # mutate(data = map_chr(data, ~ str_c(.x, sep = ","))) %>% 
+  # select(-tmp_name, OtherTeamIDs = data)
 
 # attempt to search by email/username
 username_match <- all_users %>% 
@@ -64,7 +70,7 @@ username_match <- all_users %>%
       mutate(tmp_username = str_replace(Email, "@.*", "")),
     .,
     by = c("tmp_username" = "userName"),
-    max_dist = 5) %>%
+    max_dist = 4) %>%
   select(-tmp_name, -tmp_username, -teamId) 
 
 # combine results
