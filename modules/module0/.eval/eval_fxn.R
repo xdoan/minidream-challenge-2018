@@ -18,8 +18,8 @@ score_submission <- function(submission_filename) {
                     d = abs(as.numeric(bday_diff)))
   }
   
-  age_actual <- 32
-  age_diff <- answers$age - age_actual
+  age_actual <- 32L
+  age_diff <- as.integer(answers$age) - age_actual
   if (age_diff > 0) {
     age_msg <- glue("You overshot by {d} years.", d = age_diff)
   } else if (age_diff < 0) {
