@@ -134,6 +134,20 @@ minidream_roster_df <- roster_augmented_df %>%
          SynapseTeamID, SynapseTeamName, JoinedTeam, Registered,
          RStudioUserName)
 
+
+# check submissions -------------------------------------------------------
+
+source(file.path(here::here("R"), "collect_submissions.R"))
+
+minidream_roster_df <- minidream_roster_df %>% 
+  left_join(select(submission_df, userId, stringAnnos_module), 
+            by = c("SynapseID" = "userId")) %>% 
+  distinct() %>% 
+  group_by(Name) %>% 
+  mutate(SubmittedModules = str_c(stringAnnos_module, collapse = ", ")) %>% 
+  select(-stringAnnos_module) %>% 
+  distinct()
+
 # create/update Synapse table ---------------------------------------------
 
 as_table_columns <- function(df) {
