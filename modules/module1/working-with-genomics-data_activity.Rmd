@@ -1,7 +1,7 @@
 ---
 title: "Working with genomics data"
 author: "Andrew Gentles"
-date: "June 12, 2018"
+date: "June 14, 2018"
 output: html_notebook
 editor_options: 
   chunk_output_type: inline
@@ -367,7 +367,15 @@ You're now ready to submit the prediction. Just run the chunk below, a file with
 
 ```{r}
 library(synapser)
-synLogin(rememberMe = TRUE, silent = TRUE)
+
+# If you didn't submit an answer for Module 0, remove the '#'s
+# on the next 2 lines and enter your Synapse username and password
+# before running this chunk.
+# synLogin('my_synapse_username', 'my_synapse_password',
+#          rememberMe = TRUE, silent = TRUE)
+
+# If you submitted for Module 0, this should work.
+synLogin(silent = TRUE)
 submission <- submit_module_answers(module = 1)
 ```
 
@@ -376,6 +384,8 @@ Congrats — you’ve reached the end of **Module 1**! You can now return to the
 ---
 
 # Bonus
+
+Feel free to explore or think about these questions on your own time, and post your thoughts on the Discussion boards if you want feedback!
 
 1. Are the speeds at which cells move on different substrates correlated? e.g., do cell lines that move faster on glass also move faster in the `"HyaluronicAcid Fibronectin"` condition? You'll need to pull out the data for different conditions, line up the cell lines, and check the correlation.
 
