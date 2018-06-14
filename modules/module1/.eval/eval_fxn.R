@@ -1,18 +1,13 @@
 library(yaml)
 library(tidyverse)
 library(glue)
+library(rprojroot)
 
-set_basepath <- function(type = c("data", "R")) {
-  if (stringr::str_length(Sys.which("rstudio-server"))) {
-    file.path("home/shared", type)
-  } else {
-    here::here(type)
-  }
-}
-
-data_dir <- set_basepath("data")
+root_dir <- find_root(is_rstudio_project, thisfile())
+data_dir <- file.path(root_dir, "data")
 
 score_submission <- function(submission_filename) {
+
   load(file.path(data_dir, "pson_expr_tpm_df.RData"))
   load(file.path(data_dir, "pson_expr_gene_info.RData"))
   load(file.path(data_dir, "pson_motility_tidy_df.RData"))
