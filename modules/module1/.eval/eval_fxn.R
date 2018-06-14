@@ -2,11 +2,20 @@ library(yaml)
 library(tidyverse)
 library(glue)
 
+set_basepath <- function(type = c("data", "R")) {
+  if (stringr::str_length(Sys.which("rstudio-server"))) {
+    file.path("home/shared", type)
+  } else {
+    here::here(type)
+  }
+}
+
+data_dir <- set_basepath("data")
 
 score_submission <- function(submission_filename) {
-  load("data/pson_expr_tpm_df.RData")
-  load("data/pson_expr_gene_info.RData")
-  load("data/pson_motility_tidy_df.RData")
+  load(file.path(data_dir, "pson_expr_tpm_df.RData"))
+  load(file.path(data_dir, "pson_expr_gene_info.RData"))
+  load(file.path(data_dir, "pson_motility_tidy_df.RData"))
   
   answers <- yaml.load_file(submission_filename)
   
