@@ -23,7 +23,7 @@ scripts_dir <- set_basepath("R")
 source(file.path(scripts_dir, "submission_helpers.R"))
 ```
 
-# Introduction
+# About this activity
 
 In the last presentation, we learned that an unsupervised analysis can
 be used to explore large data sets (with many genes and/or many
@@ -33,12 +33,13 @@ first to get to know it.  These initial analyses will oftentimes
 reveal idiosyncracies in the data (such as *batch effects*) that may
 confound the interpretation of the results.
 
-Today, we will learn how to cluster gene expression data visualize it
+Today, we will learn how to cluster gene expression data and visualize it
 with heatmaps.  These are basic, yet powerful, tools that every
 genomics researcher should have in their toolbox.  They can be used to
 tease out the strongest signals in the data, which can tell you
 something about the biology driving the disease.
 
+---
 
 # Loading the data
 
@@ -80,7 +81,7 @@ Let's take an initial look at the data that we loaded.  These data are
 stored in R data frames, which are kind of like matrices in that they
 have rows and columns.  To see how big the data is (how many rows and
 columns there are), we'll check the dimensions with the `dim`
-function, that we talked about last week.
+function that we talked about last week.
 
 ```{r}
 dim(brca_expr_norm_df)
@@ -104,7 +105,7 @@ names(brca_cdr_clinical_df)[1:5]
 
 This reveals that the first column of `brca_expr_norm_df` contains the
 `gene_id`, while the remaining columns contain data for the samples.
-For the other two matrices, the first column `bcr_patient_barcode`
+For the other two tables, the first column `bcr_patient_barcode`
 contains the name of the samples, while the remaining columns contain
 clinical covariates.
 
@@ -129,6 +130,7 @@ covariates [^tidy].
     analyzing, you should always strive to make your data tidy:
     (https://www.jstatsoft.org/article/view/v059i10/v59i10.pdf).
 
+---
 
 # Cleaning the data
 
@@ -193,7 +195,6 @@ gene.name <- brca_expr_norm_df[,1]
 X <- as.matrix(brca_expr_norm_df[,2:ncol(brca_expr_norm_df)])
 ```
 
----
 
 ## Genes: Average expression values
 
@@ -234,7 +235,7 @@ Instead, it is very common to assume a Gaussian or normal distribution
     that your data is probably not normally distributed, and that the
     results from the statistical methods are therefore not going to be
     precisely accurate.  It is best to validate your findings with
-    other methods (e.g. other statistical tests, other data sets,
+    other methods (e.g., other statistical tests, other data sets,
     other types of assays).
 
 Because gene expression data has a long right tail, it is common to
@@ -257,7 +258,7 @@ print(X[1:5,1:5])
 print(X.log[1:5,1:5])
 ```
 
-Hey, what are those -Inf values?  This happens everywhere the original
+Hey, what are those `-Inf` values?  This happens everywhere the original
 value is 0, because the log of 0 is -infinity.  To avoid this problem,
 we can add a *pseudo-count* of 1.  If we do this, the minimum
 expression value will be 1, which can be logged without generating
@@ -279,7 +280,6 @@ This isn't quite normal (especially at the lower range), but it is
 much closer, and importantly, close enough for some exploratory
 analyses.
 
----
 
 ## Samples: Distributions of expression values
 
@@ -294,29 +294,32 @@ boxplot(X.log[,I], xaxt="n", xlab="Samples", ylab="Log_2 Gene Expression",
 ```
 
 Here, each of the columns is a sample, and the Y-axis shows the
-distribution of the expression of genes in each sample.  (Here, for
+distribution of the expression of genes in each sample.  (For
 simplicity, I've only plotted 1 out of every 10 samples, as indicated
 in the `I` variable.)  When we look at these plots, we hope to see a
 similar distribution across all samples.  While the expression of any
 individual gene will vary from sample to sample, as a whole, the
-distribution should be similar.  If we see differences (i.e. one set
+distribution should be similar.  If we see differences (i.e., one set
 of samples have much different expression values than another), we
 will need to investigate why that is so, whether it is due to a
-difference in the biology (e.g. different tissues can exhibit
+difference in the biology (e.g., different tissues can exhibit
 different expression), or a technical artifact (rather common,
 unfortunately).  Here, the data looks pretty clean.  You can also try
 plotting out the entire data set to see.
 
 ---
 
-# Making a heatmap
+# Visualizing the data with heatmaps
 
 Let's start by taking a look at what the data looks like using a
 heatmap.  We won't be able to make a heatmap of the entire data
-set--there's just too many genes.
+set — there are just too many genes.
+
+Just to remind ourselves, take another look at the size of the data. 
 
 ```{r}
-print(dim(X.log))
+# Check the dimensions of `X.log`
+dim(X.log)
 ```
 
 To reduce the number of genes, we will try to select the *most
@@ -415,7 +418,7 @@ I.sample <- seq(1, ncol(X), 10)
 rev <- X.log.sub[nrow(X.log.sub):1, I.sample]
 heatmap(
   rev, Rowv=NA, Colv=NA, scale="none", labRow="",
-  labCol="", col=brewer.rdbu.div.colors(64))
+  labCol="", col=brewer.rdbu.div.colors(64), margins = c(1, 0))
 ```
 
 Each row is a gene, and each column is a sample.  It doesn't quite
@@ -430,7 +433,7 @@ genes, rather than the absolute expression.
 To get the relative gene expression, we will first normalize each of
 the genes.  A common way to do this is to change each gene such that
 the mean expression is 0, and the variance is 1.  The gene expression
-values normalized this way can be interpreted as z-scores, or the
+values normalized this way can be interpreted as *z-scores*, or the
 number of standard deviations arount the mean.  The absolute gene
 expression values will be changed, but the relative expression
 (whether it is higher or lower in a particular sample) will be
@@ -454,22 +457,30 @@ rev <- X.norm[nrow(X.norm):1, I.sample]
 rev <- pmax(pmin(rev, 2), -2)
 heatmap(
   rev, Rowv=NA, Colv=NA, scale="none", labRow="",
-  labCol="", col=brewer.rdbu.div.colors(64), zlim=c(-2, 2))
+  labCol="", col=brewer.rdbu.div.colors(64), zlim=c(-2, 2),
+  margins = c(1, 0))
 ```
 
 This heatmap reveals a lot of variation in the gene expression, but
 it's hard to see the patterns this way.  Thus, we need to do some
-clustering.
+*clustering*.
 
+---
 
-# Clustering reveals patterns in the data
+# Clustering the data
 
-Here, we will do hierarchical agglomerative clustering (or just
+## Clustering reveals patterns in the data
+
+Here, we will do *hierarchical agglomerative clustering* (or just
 hierarchical clustering).  As we discussed before, there are a number
 of distance metrics, or ways to calculate the distance between two
 data points.  Some common ones that might be appropriate for gene
 expression data are:
-pearson, euclidean, manhattan, minkowski
+
++ pearson
++ euclidean
++ manhattan
++ minkowski
 
 You can get a description of them in R using:
 ```{r}
@@ -478,7 +489,10 @@ You can get a description of them in R using:
 
 Also, for hierarchical clustering, there are different ways to
 combine data points into clusters:
-average, complete, single
+
++ average
++ complete
++ single
 
 See:
 ```{r}
@@ -507,11 +521,13 @@ Now, we will generate the clustered heatmaps.
 rev <- pmax(pmin(rev, 2), -2)
 heatmap(
   rev, Rowv=as.dendrogram(rc), Colv=as.dendrogram(cc), scale="none",
-  labRow="", labCol="", col=brewer.rdbu.div.colors(64), zlim=c(-2, 2))
+  labRow="", labCol="", col=brewer.rdbu.div.colors(64), zlim=c(-2, 2),
+  margins = c(1, 0))
 ```
 
 
-# Clusters and the underlying biology
+
+## Clusters and the underlying biology
 
 From this heatmap, we can see that the tumors split up into different
 groups.  Is there any biological significance to these clusters?  Are
@@ -523,12 +539,12 @@ tumors, depending on whether the tumor expresses high levels of
 receptors for estrogen.  This is really important to know because it
 tells you what's driving the disease, and also how to treat it.  To
 see whether ER status is associated with these clusters, let's label
-the samples with a "+" for ER+ breast cancers, and "." for negative.
+the samples with a `"+"` for ER+ breast cancers, and `"."` for negative.
 We'll leave blank the tumors that are missing this information
 [^check_order].
 
 [^check_order]: The first few lines of this code are just checks to
-    make sure the samples in the brca_clinical_df data frame,
+    make sure the samples in the `brca_clinical_df` data frame,
     containing the ER status, are in the same order as the gene
     expression matrix.  If they aren't in the same order, the plot
     will be incorrect.  Since this is critically important, you MUST
@@ -549,7 +565,7 @@ print(sum(er == ""))
 heatmap(
   rev, Rowv=as.dendrogram(rc), Colv=as.dendrogram(cc), scale="none",
   labRow="", labCol=er, col=brewer.rdbu.div.colors(64),
-  zlim=c(-2, 2))
+  zlim=c(-2, 2), margins = c(1, 0))
 ```
 
 In this plot, I see about four clusters of samples (although we can
@@ -590,25 +606,24 @@ statistically significant [^chisq_warning].
       are small, and thus difficult to model accurately.
       We can ignore this warning for now.
 
----
 
-# t-SNE: T-distributed Stochastic Neighbor Embedding
+## t-SNE: T-distributed Stochastic Neighbor Embedding
 
 Another method to look at the data is *t-SNE*.  This method has
-recently become popular because it works well with single cell data.
+recently become popular because it works well with single-cell data.
 It is a way to organize high dimensional data (the tumor samples here
 are high dimensional because each gene is a dimension) into low
-dimensions (i.e. into a two-dimensional scatterplot) in a way that
+dimensions (i.e., into a two-dimensional scatterplot) in a way that
 best preserves the distances seen in high dimension.  While we're not
-looking at single cell data here, it works well on bulk expression
+looking at single-cell data here, it works well on bulk expression
 data too.
 
 A t-SNE analysis has one (major) parameter that you must specify, the
-perplexity.  It determines the size of the neighborhood the algorithm
+*perplexity*.  It determines the size of the neighborhood the algorithm
 uses when finding clusters.  The way to fit this parameter is just to
 try different methods and see what the clustering looks like.  Usually
 a good perplexity is within 2-50, and I've found that around 15-25
-usually works well for single cell expression data.  You can try
+usually works well for single-cell expression data.  You can try
 playing around with this to see how it affects the plot.
 
 Let's see how we can use t-SNE to cluster the data set above.  We'll
@@ -623,7 +638,7 @@ library(tsne)
 
 PERPLEXITY <- 25
 D <- as.dist(1-cor(X.norm, method="pearson"))
-coords <- tsne(D, perplexity=PERPLEXITY, max_iter=500)
+coords <- tsne(D, perplexity=PERPLEXITY, max_iter=200)
 plot(coords[,1], coords[,2], pch=19, cex=0.75, xlab="", ylab="", axes=FALSE)
 ```
 
@@ -652,7 +667,6 @@ if(length(col) != nrow(coords)) stop("misaligned")
 
 plot(coords[,1], coords[,2], pch=19, cex=0.75, xlab="", ylab="",
      axes=FALSE, col=col)
-
 ```
 
 You can see that the ER positive (red) and negative (blue) tumors are
@@ -671,17 +685,69 @@ number of clusters) and p-value you can find?
 
 To answer this question, you can re-run the code under the section
 *Clustering reveals patterns in the data*.  You can try different
-values for `dist.method`, including `pearson`, `euclidean`, or
-`manhattan`.  For `clust.method`, you can try `average`, `complete`,
+values for `my_dist.method`, including `pearson`, `euclidean`, or
+`manhattan`.  For `my_clust.method`, you can try `average`, `complete`,
 or `single`.  Run the chunks and see what the clustered heatmap looks
 like.
 
-Finally, there's a chunk that calculates the p-value using a
-chi-squared test.  In that chunk, you may need to change the
-`NUM.CLUSTERS` parameter based on the number of clusters you wish to
+```{r}
+# Select and fill in the values you want to use for distance method and
+# clustering method (refer to the values above)
+my_dist.method <- ""
+my_clust.method <- ""
+
+# Don't worry about changing the code below! You can just adjust the two
+# values above and then re-run the chunk when you want to see the updated
+# heatmap and clustering results.
+rev <- X.norm[nrow(X.norm):1, I.sample]
+if(my_dist.method == "pearson") {
+  row.dist <- as.dist(1-cor(t(rev), method=my_dist.method))
+  col.dist <- as.dist(1-cor(rev, method=my_dist.method))
+} else {
+  row.dist <- dist(rev, method=my_dist.method)
+  col.dist <- dist(t(rev), method=my_dist.method)
+}
+rc <- hclust(row.dist, method=my_clust.method)
+cc <- hclust(col.dist, method=my_clust.method)
+
+rev <- pmax(pmin(rev, 2), -2)
+heatmap(
+  rev, Rowv=as.dendrogram(rc), Colv=as.dendrogram(cc), scale="none",
+  labRow="", labCol=er, col=brewer.rdbu.div.colors(64),
+  zlim=c(-2, 2), margins = c(1, 0))
+```
+
+Finally, here's a chunk that calculates the p-value using a
+chi-squared test.  In this chunk, you will need to change the
+`my_NUM.CLUSTERS` parameter based on the number of clusters you wish to
 break the samples into.  There's not a hard and fast rule for how to
 choose this.  You can just look at the data to see how many you think
 naturally falls out.
+
+```{r}
+# Select and fill in the value you want to use for number of clusters
+my_NUM.CLUSTERS <- 0 
+
+# Don't worry about changing the code below! You can just adjust the two
+# value above and then re-run the chunk when you want to see the updated
+# Chi-squared test results
+if(!all(clin[["bcr_patient_barcode"]] == cc$labels)) stop("unaligned")
+cluster <- cutree(cc, k=my_NUM.CLUSTERS)
+
+outcome <- "breast_carcinoma_estrogen_receptor_status"
+values <- sort(unique(clin[[outcome]]))
+uniq.clust <- sort(unique(cluster))
+counts <- matrix(0, nrow=length(values), ncol=length(uniq.clust))
+for(i in 1:length(values)) {
+  for(j in 1:length(uniq.clust)) {
+    I1 <- clin[[outcome]] == values[i]
+    I2 <- cluster == uniq.clust[j]
+    counts[i, j] <- sum(I1&I2)
+  }
+}
+print(chisq.test(counts))
+```
+
 
 Please document your results below.
 
@@ -702,16 +768,31 @@ submission ID, and check the mini-DREAM scoreboards to see the
 results.
 
 ```{r}
-#library(synapser)
-#synLogin(rememberMe = TRUE, silent = TRUE)
-#submission <- submit_module_answers(module = 1)
+library(synapser)
+synLogin(rememberMe = TRUE, silent = TRUE)
+submission <- submit_module_answers(module = 2)
 ```
-
-
 
 ---
 
-# Thought questions:
+# The most important take-away
+
+The most important thing I would like you to take from this, is to
+**always look at your data**.  As a computational scientist, it is
+easy to become complacent and place an undue amount of faith in the
+power of the formulas that we've spent so much time developing.
+However, the methods are only as good as the underlying data, and
+biology has a limitless ability to surprise.  So, don't fail to spend
+time looking at your data.  What does the underlying distribution look
+like?  Are there unexpected patterns in it that are difficult to
+explain?  Unsupervised methods can help you to reveal confounding
+factors (very frequent), or discover new biology (sometimes).
+
+Have fun exploring your data!
+
+---
+
+# Bonus — Thought questions
 
 1.  A significant problem in science is *overfitting the data*.  This
 is a common phenomenon where a computational method may work really
@@ -752,26 +833,5 @@ files).  What are the p-values of their association?
 does that mean biologically?  Which one causes the other?  Or could
 they both be the result of another process?  How would you distinguish
 these possibilities?
-
-
----
-
-
-
-# The most important take-away
-
-The most important thing I would like you to take from this, is to
-**always look at your data**.  As a computational scientist, it is
-easy to become complacent and place an undue amount of faith in the
-power of the formulas that we've spent so much time developing.
-However, the methods are only as good as the underlying data, and
-biology has a limitless ability to surprise.  So, don't fail to spend
-time looking at your data.  What does the underlying distribution look
-like?  Are there unexpected patterns in it that are difficult to
-explain?  Unsupervised methods can help you to reveal confounding
-factors (very frequent), or discover new biology (sometimes).
-
-Have fun exploring your data!
-
 
 ---
