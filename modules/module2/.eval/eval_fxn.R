@@ -29,9 +29,6 @@ format_data <- function() {
     I <- match(sample.names, brca_clinical_df[["bcr_patient_barcode"]])
     brca_clinical_df <- brca_clinical_df[I,]
     
-    I <- match(sample.names, brca_cdr_clinical_df[["bcr_patient_barcode"]])
-    brca_cdr_clinical_df <- brca_cdr_clinical_df[I,]
-    
     gene.name <- brca_expr_norm_df[,1]
     X <- as.matrix(brca_expr_norm_df[,2:ncol(brca_expr_norm_df)])
     X.log <- log(X+1, 2)
@@ -47,7 +44,10 @@ format_data <- function() {
     means <- apply(x, 1, mean)
     x <- sweep(x, 1, means)
     x <- t(apply(x, 1, function(x) {
-      V.0 <- var(x); M.0 <- mean(x); (x-M.0)*sqrt(1/V.0) + M.0 }))
+      V.0 <- var(x); 
+      M.0 <- mean(x); 
+      (x-M.0)*sqrt(1/V.0) + M.0 
+    }))
     X.norm <- x
     rev <- X.norm[nrow(X.norm):1, I.sample]
     
@@ -65,7 +65,7 @@ score_submission <- function(submission_filename) {
 
   answers <- yaml.load_file(submission_filename)
   dist.method <- answers$distance_metric
-  clust.metod <- answers$cluster_method
+  clust.method <- answers$cluster_method
   NUM.CLUSTERS <- answers$num_clusters
   p_value <- answers$p_value
   
@@ -83,13 +83,12 @@ score_submission <- function(submission_filename) {
   rc <- hclust(row.dist, method=clust.method)
   cc <- hclust(col.dist, method=clust.method)
   
-  rev <- pmax(pmin(rev, 2), -2)
-  
   cluster <- cutree(cc, k=NUM.CLUSTERS)
   
   outcome <- "breast_carcinoma_estrogen_receptor_status"
   values <- sort(unique(clin[[outcome]]))
   uniq.clust <- sort(unique(cluster))
+
   counts <- matrix(0, nrow=length(values), ncol=length(uniq.clust))
   for(i in 1:length(values)) {
     for(j in 1:length(uniq.clust)) {
@@ -107,11 +106,11 @@ score_submission <- function(submission_filename) {
   ) %>%
     isTRUE()
   
-  if (delta_match) {
+  if (pval_match) {
     msg <- glue("You got a p-value of {p}. That matched what I found for ",
-                "the same combination of distance metric and clustering", 
+                "the same combination of distance metric and clustering ", 
                 "method.",
-                p = round(answers$p_value, digits = 4))
+                p = round(answers$p_value, digits = 5))
     if (res$p.value <= 0.01) {
       msg <- paste(msg, "That's pretty significant — you're a p-hacking",
                    "champion!")
@@ -126,8 +125,8 @@ score_submission <- function(submission_filename) {
     msg <- glue("Hmm... you found a p-value of {p}, but I calculated ",
                 "{p0} for that distance metric and clustering method. ", 
                 "Are you sure you copied the right value?", 
-                p = round(answers$p_value, digits = 4), 
-                p0 = round(res$p.value, digits = 4))
+                p = round(answers$p_value, digits = 5), 
+                p0 = round(res$p.value, digits = 5))
   }
   
   answers["comment"] <- msg
