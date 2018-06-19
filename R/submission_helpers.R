@@ -37,11 +37,6 @@ create_module1_submission <- function() {
 create_module2_submission <- function() {
   submission_filename <- paste(Sys.getenv("USER"), "activity-2.yml", sep = "_")
   
-  my_distance_metric <- ""
-  my_cluster_method <- ""
-  my_num_clusters <- 0
-  my_p_value <- 1
-  
   distance_metric <<- my_distance_metric
   cluster_method <<- my_cluster_method
   num_clusters <<- my_num_clusters
