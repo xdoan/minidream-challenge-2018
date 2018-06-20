@@ -2,9 +2,7 @@
 title: "Exploring relationships among biological variables and observations"
 author: "Jeffrey Chang and Philip Moos"
 date: "6/21/2018"
-output:
-  html_document:
-    df_print: paged
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
@@ -12,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 set_basepath <- function(type = c("data", "R")) {
   if (stringr::str_length(Sys.which("rstudio-server"))) {
-    file.path("home/shared", type)
+    file.path("/home/shared", type)
   } else {
     here::here(type)
   }
@@ -319,7 +317,7 @@ Just to remind ourselves, take another look at the size of the data.
 
 ```{r}
 # Check the dimensions of `X.log`
-dim(X.log)
+
 ```
 
 To reduce the number of genes, we will try to select the *most
@@ -656,10 +654,10 @@ according to the ER status.  ER+ will be red, and ER- will be blue.
     shade (D8), while green (07) and blue (13) are low.
 
 ```{r}
-clin <- brca_clinical_df
-if(!all(clin[["bcr_patient_barcode"]] == colnames(X.norm))) stop("unaligned")
+clin.tsne <- brca_clinical_df
+if(!all(clin.tsne[["bcr_patient_barcode"]] == colnames(X.norm))) stop("unaligned")
 
-x <- clin[["breast_carcinoma_estrogen_receptor_status"]]
+x <- clin.tsne[["breast_carcinoma_estrogen_receptor_status"]]
 col <- rep("#A0A0A0", length(x))
 col[x == "Positive"] <- "#D80713"   # Red
 col[x == "Negative"] <- "#3979A8"   # Blue
