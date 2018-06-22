@@ -14,95 +14,119 @@ The preview shows you a rendered HTML copy of the contents of the editor. Conseq
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-data_dir <- "/home/shared/data"
-scripts_dir <- "/home/shared/R"
+
+set_basepath <- function(type = c("data", "R")) {
+  if (stringr::str_length(Sys.which("rstudio-server"))) {
+    file.path("/home/shared", type)
+  } else {
+    here::here(type)
+  }
+}
+
+data_dir <- set_basepath("data")
+scripts_dir <- set_basepath("R")
 source(file.path(scripts_dir, "submission_helpers.R"))
 ```
 
-## Cell line gene expression data, input and manipulate as in Module 1
+
+# Loading and inspecting the data
+
+Run the chunk below to pre-load and format some data that you'll be using for the activity below. Feel free to review the individual steps (**hint:** they're similar to the transformations we applied in Module 1), but otherwise we'll jump right into inspecting and working with the data!
 
 ```{r}
-load(file.path(data_dir, "pson_expr_tpm_df.RData"))
+pson_pca_logtpm_mat_file <- file.path(data_dir, "pson_pca_logtpm_mat.RData")
+if (!file.exists(pson_pca_logtpm_mat_file)) {
+  load(file.path(data_dir, "pson_expr_tpm_df.RData"))
+  load(file.path(data_dir, "pson_expr_gene_info.RData"))
+  load(file.path(data_dir, "pson_motility_tidy_df.RData"))
+  pson_expr_tpm_df2 <- merge(x = gene_df, y = pson_expr_tpm_df, 
+                      by.x = "gene_id", by.y = "gene_id")
+  pson_tpm_mat <- as.matrix(pson_expr_tpm_df2[, -c(1:5)])
+  rownames(pson_tpm_mat) <- pson_expr_tpm_df2$symbol
+  pson_logtpm_mat <- log2(1 + pson_tpm_mat)
+  pson_pca_mat<-t(pson_logtpm_mat)
+  save(pson_pca_mat, file = pson_pca_logtpm_mat_file)
+} else {
+  load(pson_pca_logtpm_mat_file)
+}
+```
+
+
+Check out `pson_expr_tpm_df`:
+
+```{r}
+# How do you see what is included in this data frame? Run the command. 
+
 ```
 
 ```{r}
-#How do you see what is included in this df? Run the command. 
+# What are the sample names in `pson_expr_tpm_df`?
 
 
-
-```
-
-```{r}
-#What are the sample names in pson_expr_tpm_df?
-
-
-#How are genes identified?
-
+# How are genes identified?
 
 ```
 
 ```{r}
-#Andrew taught us many ways to inspect the data. Try this one.
+# Andrew taught us many ways to inspect the data. Try this one.
+View(pson_expr_tpm_df[1:1000, ]) # only view the first 1000 rows so we don't
+                                 # make your browser too unhappy...
+```
 
-View(pson_expr_tpm_df)
+As you learned, the gene IDs are not very informative — they come from a database called **Ensembl**. More commonly, we would use the **Hugo gene symbols** (https://www.genenames.org/). These are the gene names you are more used to seeing (MYC, BRCA1, etc). We have this information stored in another file.
+
+Check out the first few rows of `gene_df`:
+
+```{r}
+# Run the command to view the first 6 rows of `gene_df`
 
 ```
 
-As you learned, the gene IDs are not very informative — they come from a database called ENSEMBL. More commonly, we would use the Hugo gene symbols (https://www.genenames.org/). These are the gene names you are more used to seeing (MYC, BRCA1, etc). We have this information stored in another file.
+We now have a new variable called `pson_pca_mat` that we'll use for the examples below. Take a look at the first few rows and columns of this matrix, and try to figure out what changes were made to go from `pson_expr_tpm_df` and `gene_df` to what you see. Compare to `pson_logtpm_mat` and see what else is different.
 
 ```{r}
-load(file.path(data_dir, "pson_expr_gene_info.RData"))
-```
+# Take a look at the first few rows and columns of `pson_pca_mat`
+pson_pca_mat[1:5, 1:5]
 
-```{r}
-#head(gene_df)
-convert_ENSG_HUGO_df<-gene_df[,c(1,3)]
-head(convert_ENSG_HUGO_df)
-```
-
-Recall what the function merge does. Succint and powerful!
-
-```{r}
-pson_expr_tpm_df2 <- merge(x = gene_df, y = pson_expr_tpm_df, 
-                           by.x = "gene_id", by.y = "gene_id")
-pson_expr_tpm_df2[1:5, 1:9] # view a few more columns this time
-```
-
-```{r}
-pson_tpm_mat <- as.matrix(pson_expr_tpm_df2[, -c(1:5)]) 
-rownames(pson_tpm_mat) <- pson_expr_tpm_df2$symbol
-pson_tpm_mat[1:5, 1:5]
-```
-
-```{r}
-pson_logtpm_mat <- log2(1 + pson_tpm_mat)
+# Take a look at the first few rows and columns of `pson_logtpm_mat`
 pson_logtpm_mat[1:5, 1:5]
 ```
 
-We will us the function "prcomp()" to run the principal component analysis algorithm. "prcomp()" takes a matrix as input where the samples (cell lines) are the rows, and the features (transcript counts) are the columns.
+Besides any normalization (e.g., "log" of expression values), translation (changing gene IDs to symbols), or format conversion (data frame to matrix), we've also **transposed** or rotated the data such that genes are now represented by columns and samples by rows. More on why we did this next!
+
+---
+
+# Getting started with PCA with PS-ON cell line data
+
+We will use the function **`prcomp()`** to run the principal component analysis (PCA) algorithm. We're interested in checking out the variability and similarity of samples (cell lines) in our data based on their gene expression patterns. To do this, we need to give `prcomp()` a matrix as where the samples are the *rows*, and the features (transcript counts) are the *columns*. If we hadn't transposed, PCA would still work — but it would instead be telling us about the relationship *between* genes.
+
+## Calculating PCA
+
+We want to make sure that we can connect our expression data to motility measurements. I happen to know that for one sample in `pson_pca_mat`, we're missing motility data (I cheating a bit and checked in advance, but it makes life easier given our time constraints).
 
 ```{r}
-pson_mat<-t(pson_logtpm_mat)
-
-#I will the eighth row (cell line) now because it is not included in the motility data frame.
-#This is cheating a bit, but it makes life easier given our time constraints.
-#I figured this out by matching the cell lines from the expression and motility data.
-
-pson_mat<-pson_mat[-8,]   
-
+# let's locate and remove the sample with no motility measurement data
+pca_mat_samples <- rownames(pson_pca_mat)
+missing_row <- which(!(pca_mat_samples %in% pson_motil_tidy_df$sample))
+missing_row
+pson_pca_mat <- pson_pca_mat[-missing_row, ]   
 ```
 
-As described in our lecture, there are two additional things for us to consider. 1) The data should be mean centered around 0, and 2) the data should be scaled so that the standard deviation for each gene is 1. Our features have the same units, and it is often the case that they are not scaled; this is somewhat subjective. "prcomp()" automatically mean centers the data for us.  Scaling is up to us.
+As described in our lecture, there are two additional things for us to consider:
+
++ 1. The data should be mean-centered around 0. 
++ 2. The data should be scaled so that the standard deviation for each gene is 1. 
+
+Our features have the same units, and it is often the case that they are not scaled; this is somewhat subjective. "prcomp()" automatically mean-centers the data for us.  Scaling is up to us.
 
 ```{r}
-PCA_PSON<-prcomp(pson_mat, scale=FALSE)
-
+pson_pca <- prcomp(pson_pca_mat, scale = FALSE)
 ```
 
 Exciting, right?  But now we can get to our exploratory analysis.  What goodies does PCA_PSON hold for us?
 
 ```{r}
-names(PCA_PSON)
+names(pson_pca)
 ```
 
 We discussed these in the lecture. To summarize:
@@ -113,31 +137,27 @@ We discussed these in the lecture. To summarize:
 "x": Coordinates of the cell lines projected onto the principal components
 
 ```{r}
-dim(PCA_PSON$sdev)
-dim(PCA_PSON$rotation)
-dim(PCA_PSON$center)
-dim(PCA_PSON$scale)
-dim(PCA_PSON$x)
+dim(pson_pca$sdev)
+dim(pson_pca$rotation)
+dim(pson_pca$center)
+dim(pson_pca$scale)
+dim(pson_pca$x)
 ```
 
 Are these dimensions what you would expect?
 
 ```{r}
-
-PCA_PSON$rotation[1:5, 1:5]
-
+pson_pca$rotation[1:5, 1:5]
 ```
 ```{r}
-
-PCA_PSON$x[1:5,1:5]
-
+pson_pca$x[1:5, 1:5]
 ```
 
 
 ```{r}
-length(PCA_PSON$sdev)
-length(PCA_PSON$center)
-length(PCA_PSON$scale)
+length(pson_pca$sdev)
+length(pson_pca$center)
+length(pson_pca$scale)
 ```
 
 Check the values out! Why does scale have length 1?
@@ -145,22 +165,30 @@ Check the values out! Why does scale have length 1?
 Has PCA reduced the dimensionality of our data? Let's examine the importance of the principal components by ploting the percentage of variance explained. 
 
 ```{r}
+pve <- 100 * pson_pca$sdev^2 / sum(pson_pca$sdev^2)
 
-pve<-100*PCA_PSON$sdev^2/sum(PCA_PSON$sdev^2)
+par(mfrow = c(1, 2))
 
-par(mfrow=c(1,2))
+plot(pve,
+  type = "o",
+  ylab = "PVE", xlab = "Principal Component", col = "blue"
+)
 
-plot(pve, type="o", ylab="PVE", xlab="Principal Component", col="blue")
-
-plot(cumsum(pve), type="o", ylab="Cumulative PVE", xlab="Principal Component", col="brown3")
+plot(cumsum(pve),
+  type = "o",
+  ylab = "Cumulative PVE", xlab = "Principal Component", col = "brown3"
+)
 ```
+
+## Visualizing patterns and groups with PCA
 
 The first two PCs account for a lot of the variance, > 40%.  The first 10 PCs account for almost all of the variance.  Let's see if the first two PCs, PC1 and PC2, reveal any patterns in our data.
 
 ```{r}
-
-plot(PCA_PSON$x[,1:2], pch=19, xlab="Projection onto PC1", ylab="Projection onto PC2")
-
+plot(pson_pca$x[, 1:2],
+  pch = 19,
+  xlab = "Projection onto PC1", ylab = "Projection onto PC2"
+)
 ```
 
 Each point gives the coordinates of a sample/cell line in PC space.
@@ -168,59 +196,51 @@ It's a nice pattern with some potential.  Does is have meaning for our data set?
 Let's color the points by cell line type and diagnosis.
 
 ```{r}
-
-load(file.path(data_dir, "pson_motility_tidy_df.RData"))
-
 cell_speeds_df <- subset(pson_motil_tidy_df, summary_metric == "speed_um_hr")
 
 names(cell_speeds_df)
-
 ```
 
-We will color by "cellLine" and "diagnosis", and it is possible to explore other relationships as well.
+We will color by "`cellLine`" and "`diagnosis`", and it is possible to explore other relationships as well.
 
 Here is a simple function for coloring points by type:
 
 ```{r}
-
-csbc_Color=function(vec){
+color_by_type <- function(vec) {
+  nn <- length(unique(vec))
+  cols <- rainbow(nn,start = 0,end = max(1, nn - 1) / nn)
   
-nn<-length(unique(vec))
-  
-csbc_cols=rainbow(nn,start=0,end=max(1,nn-1)/nn)
-  
-return(csbc_cols[as.numeric(as.factor(vec))])
-
+  return(cols[as.numeric(as.factor(vec))])
 }
 ```
 
 ```{r}
+par(mfrow = c(1, 2))
 
-par(mfrow=c(1,2))
-
-plot(PCA_PSON$x[,c(1,2)],col=csbc_Color(cell_speeds_df$cellLine), pch=19)
-
-plot(PCA_PSON$x[,c(1,2)],col=csbc_Color(cell_speeds_df$diagnosis), pch=19)
-
+plot(pson_pca$x[, c(1, 2)],
+  col = color_by_type(cell_speeds_df$cellLine),
+  main = "Cell Line", pch = 19
+)
+plot(pson_pca$x[, c(1, 2)],
+  col = color_by_type(cell_speeds_df$diagnosis),
+  main = "Diagnosis", pch = 19
+)
 ```
 
 ```{r}
-
-plot(PCA_PSON$x[,c(1,2)],pch=".") 
-text(PCA_PSON$x[,c(1,2)],labels=cell_speeds_df$cellLine,pos=2,cex=0.7)
-
+plot(pson_pca$x[, c(1, 2)], pch = ".", cex = 0)
+text(pson_pca$x[, c(1, 2)], labels = cell_speeds_df$cellLine, pos = 2, cex = 0.7)
 ```
 
 ```{r}
-
-plot(PCA_PSON$x[,c(1,2)],pch=".") 
-text(PCA_PSON$x[,c(1,2)],labels=cell_speeds_df$diagnosis,pos=2,cex=0.7)
-
+plot(pson_pca$x[, c(1, 2)], pch = ".", cex = 0)
+text(pson_pca$x[, c(1, 2)], labels = cell_speeds_df$diagnosis, pos = 2, cex = 0.7)
 ```
 
-We see a nice pattern in the data:  In (PC1,PC2) space, the cell lines are nicely separated.
+We see a nice pattern in the data:  In (PC1, PC2) space, the cell lines are nicely separated.
 Note that the two breast cancer cell lines do NOT cluster together.
 
 We can perform additional principal components analyses on cell line specific data. 
 
+---
 
