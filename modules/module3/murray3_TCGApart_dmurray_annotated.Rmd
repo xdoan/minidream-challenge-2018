@@ -1,0 +1,246 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+data_dir <- "/home/shared/data"
+scripts_dir <- "/home/shared/R"
+source(file.path(scripts_dir, "submission_helpers.R"))
+```
+
+We will first load data frames we used in Modules 1 and 2.
+
+For PSON data:
+
+```{r}
+
+load(file.path(data_dir, "pson_expr_tpm_df.RData"))
+
+load(file.path(data_dir, "pson_expr_gene_info.RData"))
+
+```
+
+
+For TCGA brca data:
+
+```{r}
+
+load(file.path(data_dir, "tcga_brca_expr_norm_df.RData"))
+load(file.path(data_dir, "tcga_brca_clinical_df.RData"))
+
+brca_expr_norm_df.orig <- brca_expr_norm_df
+brca_clinical_df.orig <- brca_clinical_df
+
+```
+
+
+
+```{r}
+x1 <- names(brca_expr_norm_df)[2:ncol(brca_expr_norm_df)]
+x2 <- brca_clinical_df[["bcr_patient_barcode"]]
+sample.names <- intersect(x1, x2)
+sample.names <- sort(sample.names)
+if(is.null(sample.names)) stop("No common samples")
+if(length(sample.names) < 1000) stop("low number of common samples")
+print(sample.names[1:10])
+```
+
+
+```{r}
+
+I <- match(sample.names, names(brca_expr_norm_df))
+if(any(is.na(I))) stop("Missing samples")
+if(min(I) < 2) stop("missing gene id column")
+I <- c(1, I)
+brca_expr_norm_df <- brca_expr_norm_df[,I]
+
+I <- match(sample.names, brca_clinical_df[["bcr_patient_barcode"]])
+if(any(is.na(I))) stop("Missing samples")
+brca_clinical_df <- brca_clinical_df[I,]
+if(!all(sample.names == brca_clinical_df[["bcr_patient_barcode"]]))
+  stop("Not aligned")
+
+```
+
+
+Notice how genes are identified.  These are ensembl gene ids.
+
+```{r}
+
+brca_expr_norm_df[1:5,1:5]
+
+```
+
+
+We convert the ensembl gene ids to hugo gene names.
+
+
+```{r}
+brca_expr_norm_df2<-merge(x=convert_ENSG_HUGO_df,y=brca_expr_norm_df, by.x="gene_id",by.y="gene_id")
+
+brca_expr_norm_df2[1:5,1:5]
+
+```
+
+We now have two columns for gene identification. We convert the data frame to a matrix for our calculations, and we repurpose the hugo gene names  as the matix rownames.
+
+```{r}
+
+brca_expr_mat <- as.matrix(brca_expr_norm_df2[,3:ncol(brca_expr_norm_df2)])
+
+rownames(brca_expr_mat) <- brca_expr_norm_df2$symbol
+
+brca_expr_mat[1:5,1:5]
+```
+
+We log2 transform the data and, as we did for the PCA analysis of the PSON data, take the transverse of the matrix so the samples are rows.
+
+```{r}
+
+brca_expr_log_mat<- log(brca_expr_mat+1, 2)
+
+dim(brca_expr_log_mat)
+
+brca_mat<-t(brca_expr_log_mat)
+
+dim(brca_mat)
+
+
+```
+
+
+Let's also repeat the coloring function.
+
+```{r}
+
+csbc_Color=function(vec){
+  
+nn<-length(unique(vec))
+  
+csbc_cols=rainbow(nn,start=0,end=max(1,nn-1)/nn)
+  
+return(csbc_cols[as.numeric(as.factor(vec))])
+
+}
+```
+
+Implementing the PCA algorithm in R is now straightforward.
+
+```{r}
+
+PCA_BRCA<-prcomp(brca_mat)
+
+dim(PCA_BRCA$x)
+
+PCA_BRCA$x[1:5,1:5]
+```
+
+Let's look at the percent variance explained (or accounted for) by the principal components.
+
+```{r}
+
+pve<-100*PCA_BRCA$sdev^2/sum(PCA_BRCA$sdev^2)
+
+plot(pve, type="o", ylab="PVE", xlab="Principal Component", col="blue")
+
+```
+
+Because we have so many PCs (the number of samples - 1 = 1082), we'll consider only the first 100.
+
+```{r}
+
+par(mfrow=c(1,2))
+
+plot(pve, type="o", ylab="PVE", xlab="Principal Component", xlim=c(1,100), col="blue")
+
+plot(cumsum(pve), type="o", ylab="Cumulative PVE", xlab="Principal Component", xlim=c(1,100),col="brown3")
+
+```
+
+```{r}
+print("PVE")
+round(pve[1:10],2)
+
+print("Cumulative PVE")
+round(cumsum(pve)[1:10],2)
+```
+
+In contrast to the PSON PCA where the first two PCs account for 40% of the variance, the first two PCs for the TCGA brca analysis account for only 20% of the variance. However, for large microarray data sets, this is considered pretty good, and often PC1 and PC2 carry a fair amount of useful information.
+
+```{r}
+plot(PCA_BRCA$x[,c(1,2)])
+```
+
+We see roughly two clusters.  Do these have biologial meaning?  What clinical information do we have on the TCGA brca samples?
+
+
+```{r}
+names(brca_clinical_df)
+
+```
+
+```{r}
+brca_clinical_df$bcr_patient_barcode[1:5]
+```
+
+
+Ok, so we have quite a lot of information.  Let's consider estrogen receptor (ER) status. We considered this in the lecture for a different brca set.   I am including lines to pull the progeterone receptor (PR) and the receptor tyrosine kinase erbB-2 (HER2) for your examination later.
+
+```{r}
+ER_status<-brca_clinical_df[,43]
+PR_status<-brca_clinical_df[,40]
+HER2_status<-brca_clinical_df[,44]
+
+```
+
+
+What values are encompassed by the receptor status clinical features?
+
+```{r}
+unique_status<-unique(ER_status)
+for (i in 1:length(unique_status)){
+  print(c(unique_status[i],length(ER_status[ER_status==unique_status[i]])))
+}
+
+```
+
+
+```{r}
+unique_status<-unique(PR_status)
+for (i in 1:length(unique_status)){
+  print(c(unique_status[i],length(PR_status[PR_status==unique_status[i]])))
+}
+
+```
+
+
+
+```{r}
+unique_status<-unique(HER2_status)
+for (i in 1:length(unique_status)){
+  print(c(unique_status[i],length(HER2_status[HER2_status==unique_status[i]])))
+}
+
+```
+
+We color the samples in the PC1/PC2 project plot according to ER status.
+
+```{r}
+plot(PCA_BRCA$x[,c(1,2)],col=csbc_Color(ER_status),pch=19)
+```
+
+
+
+
+
+
