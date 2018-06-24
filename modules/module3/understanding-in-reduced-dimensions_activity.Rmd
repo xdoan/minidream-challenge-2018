@@ -46,7 +46,8 @@ if (!file.exists(pson_pca_inputs_file)) {
   rownames(pson_tpm_mat) <- pson_expr_tpm_df2$symbol
   pson_logtpm_mat <- log2(1 + pson_tpm_mat)
   pson_pca_mat<-t(pson_logtpm_mat)
-  save(list = c("pson_pca_mat", "pson_logtpm_mat"), file = pson_pca_logtpm_mat_file)
+  save(list = c("pson_pca_mat", "pson_logtpm_mat"), 
+       file = pson_pca_inputs_file)
 } else {
   load(pson_pca_inputs_file)
 }
@@ -164,6 +165,8 @@ length(pson_pca$scale)
 
 Check the values out! Why does scale have length 1?
 
+In this module, we are interested in "sdev," to calculate the variation explained by the principal components, and "x," which provides the coordinates of the samples (cell lines) onto the principal components.
+
 Has PCA reduced the dimensionality of our data? Let's examine the importance of the principal components by ploting the percentage of variance explained. 
 
 ```{r}
@@ -188,7 +191,7 @@ The first two PCs account for a lot of the variance, > 40%.  The first 10 PCs ac
 
 ```{r}
 plot(pson_pca$x[, 1:2],
-  pch = 19,
+  pch = 19, cex = 0.8,
   xlab = "Projection onto PC1", ylab = "Projection onto PC2"
 )
 ```
@@ -210,33 +213,47 @@ Here is a simple function for coloring points by type:
 ```{r}
 color_by_type <- function(vec) {
   nn <- length(unique(vec))
-  cols <- rainbow(nn,start = 0,end = max(1, nn - 1) / nn)
-  
+  cols <- viridisLite::viridis(nn)
+  # cols <- rainbow(nn, start = 0, end = max(1, nn - 1) / nn)
+
   return(cols[as.numeric(as.factor(vec))])
 }
 ```
 
 ```{r}
-par(mfrow = c(1, 2))
+colors <- color_by_type(unique(cell_speeds_df$diagnosis))
+diag <- unique(cell_speeds_df$diagnosis)
+plot(pson_pca$x[, c(1, 2)],
+  col = scales::alpha(color_by_type(cell_speeds_df$diagnosis), 0.8),
+  main = "Diagnosis", pch = 19, cex = 0.8
+)
 
-plot(pson_pca$x[, c(1, 2)],
-  col = color_by_type(cell_speeds_df$cellLine),
-  main = "Cell Line", pch = 19
-)
-plot(pson_pca$x[, c(1, 2)],
-  col = color_by_type(cell_speeds_df$diagnosis),
-  main = "Diagnosis", pch = 19
-)
+legend("bottomright", fill = colors, legend = diag, cex = 0.8)
 ```
 
 ```{r}
-plot(pson_pca$x[, c(1, 2)], pch = ".", cex = 0)
-text(pson_pca$x[, c(1, 2)], labels = cell_speeds_df$cellLine, pos = 2, cex = 0.7)
+colors <- color_by_type(unique(cell_speeds_df$cellLine))
+cell <- unique(cell_speeds_df$cellLine)
+plot(pson_pca$x[, c(1, 2)],
+  col = scales::alpha(color_by_type(cell_speeds_df$cellLine), 0.8),
+  main = "Cell Line", pch = 19, cex = 0.8
+)
+
+legend("bottomright", fill = colors, legend = cell, cex = 0.8)
 ```
 
 ```{r}
-plot(pson_pca$x[, c(1, 2)], pch = ".", cex = 0)
-text(pson_pca$x[, c(1, 2)], labels = cell_speeds_df$diagnosis, pos = 2, cex = 0.7)
+colors <- color_by_type(unique(cell_speeds_df$cellLine))
+cell <- unique(cell_speeds_df$cellLine)
+plot(pson_pca$x[, c(1, 2)],
+  main = "Cell Line", pch = 19, cex = 0
+)
+text(pson_pca$x[, c(1, 2)], 
+     labels = gsub(" Cancer", "", cell_speeds_df$diagnosis),
+     col = scales::alpha(color_by_type(cell_speeds_df$cellLine), 0.8),
+     pos = 2, offset = 0, cex = 0.8)
+
+legend("bottomright", fill = colors, legend = cell, cex = 0.8)
 ```
 
 We see a nice pattern in the data:  In (PC1, PC2) space, the cell lines are nicely separated.
@@ -244,20 +261,174 @@ Note that the two breast cancer cell lines do NOT cluster together.
 
 We can perform additional principal components analyses on cell line specific data. 
 
+T-47D and MDA-MB-231, two breast cancer cell lines form distinct well-separated groups.
+
+Why might this be?
+
 ---
 
 # PCA with patient data from TCGA
 
+## Load the data
+
 ```{r}
-# placeholder for any data we want to pre-format and load for this section
+load(file.path(data_dir, "tcga_brca_expr_gene_info.RData"))
+load(file.path(data_dir, "tcga_brca_expr_norm_df.RData"))
+load(file.path(data_dir, "tcga_brca_clinical_df.RData"))
+
+x1 <- names(brca_expr_norm_df)[-1]
+x2 <- brca_clinical_df[["bcr_patient_barcode"]]
+sample.names <- intersect(x1, x2)
+sample.names <- sort(sample.names)
+
+I <- match(sample.names, names(brca_expr_norm_df))
+I <- c(1, I)
+brca_expr_norm_df <- brca_expr_norm_df[, I]
+
+I <- match(sample.names, brca_clinical_df[["bcr_patient_barcode"]])
+brca_clinical_df <- brca_clinical_df[I, ]
+
+brca_expr_norm_df2 <- merge(x = gene_df,
+                            y = brca_expr_norm_df,
+                            by.x = "gene_id",
+                            by.y = "gene_id")
+
+
+brca_expr_mat <- as.matrix(brca_expr_norm_df2[, -c(1:5)])
+rownames(brca_expr_mat) <- brca_expr_norm_df2$symbol
+
+brca_log_mat <- log2(1 + brca_expr_mat)
+brca_pca_mat <- t(brca_log_mat)
 ```
 
+
+```{r}
+brca_pca_mat[1:5, 1:5]
+```
+
+## Calculating PCA
+
+Implementing the PCA algorithm in R is now straightforward.
+
+```{r}
+brca_pca <- prcomp(brca_pca_mat)
+
+dim(brca_pca$x)
+brca_pca$x[1:5,1:5]
+```
+
+Let's look at the percent variance explained (or accounted for) by the principal components.
+
+```{r}
+pve <- 100 * brca_pca$sdev^2 / sum(brca_pca$sdev^2)
+plot(pve, type = "o", ylab = "PVE", xlab = "Principal Component", col = "blue")
+```
+
+Because we have so many PCs (the number of samples - 1 = 1082), we'll consider only the first 100.
+
+```{r}
+par(mfrow = c(1, 2))
+
+plot(pve, type = "o", ylab = "PVE", xlab = "Principal Component", 
+     xlim = c(1, 100), col = "blue")
+
+plot(cumsum(pve), type = "o", ylab = "Cumulative PVE", 
+     xlab = "Principal Component", xlim = c(1, 100), col = "brown3")
+```
+
+```{r}
+print("PVE")
+round(pve[1:10], 0)
+
+print("Cumulative PVE")
+round(cumsum(pve)[1:10], 0)
+```
+
+In contrast to the PSON PCA where the first two PCs account for 40% of the variance, the first two PCs for the TCGA brca analysis account for only 20% of the variance. However, for large microarray data sets, this is considered pretty good, and often PC1 and PC2 carry a fair amount of useful information.
+
+```{r}
+plot(brca_pca$x[, c(1, 2)], cex = 0.8)
+```
+
+We see roughly two clusters.  Do these have biologial meaning?  What clinical information do we have on the TCGA brca samples?
+
+
+```{r}
+names(brca_clinical_df)
+```
+
+
+Ok, so we have quite a lot of information.  Let's consider estrogen receptor (ER) status. We considered this in the lecture for a different brca set.   I am including lines to pull the progeterone receptor (PR) and the receptor tyrosine kinase erbB-2 (HER2) for your examination later.
+
+```{r}
+ER_status <-brca_clinical_df$breast_carcinoma_estrogen_receptor_status
+```
+
+
+What values are encompassed by estrogen receptor status in the brca clinical features data frame?
+
+```{r}
+unique_status <- unique(ER_status)
+for (i in 1:length(unique_status)) {
+  print(c(unique_status[i], length(ER_status[ER_status == unique_status[i]])))
+}
+
+# another way to do this is with the `table()` function!
+table(ER_status)
+```
+
+## Visualizing patterns and groups with PCA
+
+We'll color the samples in the PC1/PC2 project plot according to ER status.
+
+```{r}
+colors <- color_by_type(unique(ER_status))
+diag <- unique(ER_status)
+plot(brca_pca$x[, c(1, 2)],
+  col = scales::alpha(color_by_type(ER_status), 0.7),
+  main = "ER status", pch = 19, cex = 0.8
+)
+
+legend("bottomleft", fill = colors, legend = diag, cex = 0.8)
+```
 
 ---
 
 # mini-DREAM Challenge  
 
 **QUESTION:** ... ?
+
+1) do PCA for PR status and HER2 status, 2) describe for which plots PC1 and PC2 are informative, and 3) do PC1 and PC2 hold information about triple negative?
+
+
+```{r}
+PR_status <- brca_clinical_df$breast_carcinoma_progesterone_receptor_status
+HER2_status <- brca_clinical_df$lab_proc_her2_neu_immunohistochemistry_receptor_status
+```
+
+```{r}
+colors <- color_by_type(unique(PR_status))
+diag <- unique(PR_status)
+plot(brca_pca$x[, c(1, 2)],
+  col = scales::alpha(color_by_type(PR_status), 0.7),
+  main = "PR status", pch = 19, cex = 0.8
+)
+
+legend("bottomleft", fill = colors, legend = diag, cex = 0.8)
+```
+
+```{r}
+colors <- scales::alpha(color_by_type(unique(HER2_status)))
+diag <- unique(HER2_status)
+plot(brca_pca$x[, c(1, 2)],
+  col = scales::alpha(color_by_type(HER2_status), 0.7),
+  main = "HER2 status", pch = 19, cex = 0.8
+)
+
+legend("bottomleft", fill = colors, legend = diag, cex = 0.8)
+```
+
+
 
 
 ## Submitting the prediction
