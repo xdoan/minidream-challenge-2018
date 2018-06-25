@@ -7,7 +7,8 @@ editor_options:
   chunk_output_type: inline
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, message=FALSE}
+
 knitr::opts_chunk$set(echo = TRUE)
 
 set_basepath <- function(type = c("data", "R")) {
@@ -25,9 +26,7 @@ source(file.path(scripts_dir, "submission_helpers.R"))
 
 # About this activity
 
-In the last presentation, we learned that an unsupervised analysis can be used to explore large data sets (with many genes and/or many samples).Every data set has its own unique personality, and whenever I am confronted with a new one, I always do an unsupervised analysis first to get to know it.  These initial analyses will oftentimes reveal idiosyncracies in the data (such as *batch effects*) that may confound the interpretation of the results.
-
-Today, we will learn how to cluster gene expression data and visualize it with heatmaps. These are basic, yet powerful, tools that every genomics researcher should have in their toolbox.  They can be used to tease out the strongest signals in the data, which can tell you something about the biology driving the disease.
+This module will introduce you to concepts and approaches to working with high-dimensional data — especially the kind you might encounter when studying gene expression in systems biology applications. Similar to clustering, principal component analysis (PCA) is an unsupervised learning approach that we can use to visualize and analyze data in *reduced* dimensions. We'll show you how to calculate and inspect the outputs of PCA, and also how you can check for informative (or problematic) patterns.
 
 ---
 
@@ -58,16 +57,16 @@ if (!file.exists(pson_pca_inputs_file)) {
 Check out `pson_expr_tpm_df`:
 
 ```{r}
-# How do you see what is included in this data frame? Run the command. 
-str(pson_expr_tpm_df) # TODO: DELETE BEFORE ACTIVITY
+# How do you see what is included in this data frame? Run the `str()` command. 
+ 
 ```
 
 ```{r}
 # What are the sample names in `pson_expr_tpm_df`?
-colnames(pson_expr_tpm_df)[-1] # TODO: DELETE BEFORE ACTIVITY
+colnames(pson_expr_tpm_df)[-1] 
 
 # How are genes identified?
-pson_expr_tpm_df$gene_id[1:5] # TODO: DELETE BEFORE ACTIVITY
+pson_expr_tpm_df$gene_id[1:5] 
 ```
 
 ```{r}
@@ -82,17 +81,17 @@ Check out the first few rows of `gene_df`:
 
 ```{r}
 # Run the command to view the first 6 rows of `gene_df`
-head(gene_df) # TODO: DELETE BEFORE ACTIVITY
+____(gene_df) # replace the blanks!
 ```
 
 We now have a new variable called `pson_pca_mat` that we'll use for the examples below. Take a look at the first few rows and columns of this matrix, and try to figure out what changes were made to go from `pson_expr_tpm_df` and `gene_df` to what you see. Compare to `pson_logtpm_mat` and see what else is different.
 
 ```{r}
 # Take a look at the first few rows and columns of `pson_pca_mat`
-pson_pca_mat[1:5, 1:5] # TODO: DELETE BEFORE ACTIVITY
+
 
 # Take a look at the first few rows and columns of `pson_logtpm_mat`
-pson_logtpm_mat[1:5, 1:5] # TODO: DELETE BEFORE ACTIVITY
+
 ```
 
 Besides any normalization (e.g., "log" of expression values), translation (changing gene IDs to symbols), or format conversion (data frame to matrix), we've also **transposed** or rotated the data such that genes are now represented by columns and samples by rows. More on why we did this next!
@@ -117,16 +116,16 @@ pson_pca_mat <- pson_pca_mat[-missing_row, ]
 
 As described in our lecture, there are two additional things for us to consider:
 
-+ 1. The data should be mean-centered around 0. 
-+ 2. The data should be scaled so that the standard deviation for each gene is 1. 
+1. Whether the data should be mean-centered around 0. 
+2. Whether the data should be scaled so that the standard deviation for each gene is 1. 
 
-Our features have the same units, and it is often the case that they are not scaled; this is somewhat subjective. "prcomp()" automatically mean-centers the data for us. Scaling is up to us.
+Our features have the same units, and it is often the case that they do not need to be scaled; this is somewhat subjective. The `prcomp()` function automatically mean-centers and scales the data for us by default. Because we want to preserve the natural differences in expression variance between genes, we'll elect *not* to scale in this case:
 
 ```{r}
 pson_pca <- prcomp(pson_pca_mat, scale = FALSE)
 ```
 
-Exciting, right?  But now we can get to our exploratory analysis.  What goodies does **`pson_pca`** hold for us?
+Exciting, right?  But now we can get to our exploratory analysis. What goodies does **`pson_pca`** hold for us?
 
 ```{r}
 names(pson_pca)
@@ -181,6 +180,12 @@ plot(pve,
      ylab = "PVE", xlab = "Principal Component", col = "blue"
 )
 
+# `cumsum` is a handy function to calculate the "cumulative sum" of a vector;
+# for example:
+# > 1:5
+# [1] 1 2 3 4 5
+# > cumsum(1:5)
+# [1]  1  3  6 10 15
 plot(cumsum(pve),
      type = "o", cex = 0.8,
      ylab = "Cumulative PVE", xlab = "Principal Component", col = "brown3"
@@ -198,9 +203,7 @@ plot(pson_pca$x[, 1:2],
 )
 ```
 
-Each point gives the coordinates of a sample/cell line in PC space.
-It's a nice pattern with some potential.  Does is have meaning for our data set?
-Let's color the points by cell line type and diagnosis.
+Each point gives the coordinates of a sample/cell line in PC space. It's a nice pattern with some potential. Does is have meaning for our data set? Let's color the points by cell line type and diagnosis.
 
 ```{r}
 cell_speeds_df <- subset(pson_motil_tidy_df, summary_metric == "speed_um_hr")
@@ -210,7 +213,7 @@ names(cell_speeds_df)
 
 We will color by `cellLine` and `diagnosis`, and it is possible to explore other relationships as well.
 
-Here is a simple function for coloring points by type — we'll use another one of the "*Color Brewer*" palettes that we learned about in Module 2.
+Here is a simple function for coloring points by type — we'll use another one of the "*Color Brewer*" palettes that we learned about in Module 2. (**note:** running this next chunk won't do anything by itself, but we'll use the new `color_by_type()` function in several places below)
 
 ```{r}
 color_by_type <- function(vec) {
@@ -234,6 +237,11 @@ plot(pson_pca$x[, c(1, 2)],
 legend("bottomright", fill = colors, legend = diag, cex = 0.8)
 ```
 
+> TIMEOUT
+> This is a fairly important point that we should take a moment to consider. Running PCA and seeing our data separate out so cleanly like this can be exciting, but it should make us pause and take a closer look. We need to check the history of how the data were generated to make sure that PCA patterns reflect *biological differences* and not *batch effects*. Can you think of other reasons why different cancer types might appear so distinct in (PC1, PC2) space?
+
+OK — scary word of caution aside, let's get back to the activity...
+
 We can use the same approach to color points based on cell line name.
 
 ```{r}
@@ -247,7 +255,7 @@ plot(pson_pca$x[, c(1, 2)],
 legend("bottomright", fill = colors, legend = cell, cex = 0.8)
 ```
 
-T-47D and MDA-MB-231, two breast cancer cell lines form distinct well-separated groups. Can you think of reasons why these points might not be grouped together?
+T-47D and MDA-MB-231, two breast cancer cell lines form distinct well-separated groups. Can you think of reasons (besides batch effects) why these points might not be grouped together? Note that the two colon cancer cell lines (SW620 and SW480) *are* grouped together.
 
 Sometimes we can pick out patterns and information more easily by encoding multiple layers of data in our plot. For example, we can simultaneously look at cell line (color) and diagnosis (label) to more easily see how points relate to each other according to these variables.
 
@@ -265,7 +273,7 @@ text(pson_pca$x[, c(1, 2)],
 legend("bottomright", fill = colors, legend = cell, cex = 0.8)
 ```
 
-We see a nice pattern in the data:  In (PC1, PC2) space, the cell lines are nicely separated. Note that the two breast cancer cell lines do NOT cluster together. In fact, the "MDA-MB-231" cell line appears more closely related to several other cancer types than to the "T-47D" cell line — why might this be?
+Again, we can see that the two breast cancer cell lines do NOT cluster together. In fact, the MDA-MB-231 cell line appears more closely related to several other cancer types than to the T-47D cell line — why might this be?
 
 ---
 
@@ -312,16 +320,18 @@ What step are we missing before calculating PCA (**note:** we're still intereste
 
 ```{r}
 # Fill in the command here to "rotate" the matrix to get our data ready for PCA
-brca_pca_mat <- t(brca_log_mat) # TODO: DELETE BEFORE ACTIVITY
+brca_pca_mat <- ____(brca_log_mat) 
 ```
 
 
 ## Calculating PCA
 
-Implementing the PCA algorithm in R is now straightforward. This will take a bit longer than the PS-ON example above — take a moment to ask questions or look ahead to the next steps!
+Implementing the PCA algorithm in R is now straightforward. 
+
+> This will take a bit longer than the PS-ON example above — take a moment to ask questions or look ahead to the next steps!
 
 ```{r}
-brca_pca <- prcomp(brca_pca_mat)
+brca_pca <- prcomp(brca_pca_mat, scale = FALSE)
 
 dim(brca_pca$x)
 brca_pca$x[1:5,1:5]
@@ -357,20 +367,19 @@ data.frame(PC = 1:10,
            Cumulative.PVE = round(cumsum(pve)[1:10], 0))
 ```
 
-In contrast to the PSON PCA where the first two PCs account for 40% of the variance, the first two PCs for the TCGA brca analysis account for only 20% of the variance. However, for large microarray data sets, this is considered pretty good, and often PC1 and PC2 carry a fair amount of useful information.
+In contrast to the PS-ON PCA where the first two PCs account for 40% of the variance, the first two PCs for the TCGA BRCA analysis account for only 20% of the variance. However, for large gene expression data sets, this is considered pretty good, and often PC1 and PC2 carry a fair amount of useful information.
 
 ```{r}
 plot(brca_pca$x[, c(1, 2)], cex = 0.8)
 ```
 
-We see roughly two clusters.  Do these have biologial meaning?  What clinical information do we have on the TCGA brca samples?
-
+We see roughly two clusters. Do these have biologial meaning?  What clinical information do we have on the TCGA BRCA samples?
 
 ```{r}
 names(brca_clinical_df)
 ```
 
-Ok, so we have quite a lot of information.  Let's consider estrogen receptor (ER) status. We considered this in the lecture for a different brca set.   I am including lines to pull the progeterone receptor (PR) and the receptor tyrosine kinase erbB-2 (HER2) for your examination later.
+Ok, so we have quite a lot of information. Let's consider estrogen receptor (ER) status. We considered this in the lecture for a different brca set. I am including lines to pull the progeterone receptor (PR) and the receptor tyrosine kinase erbB-2 (HER2) for your examination later.
 
 ```{r}
 ER_status <- brca_clinical_df$breast_carcinoma_estrogen_receptor_status
@@ -388,7 +397,7 @@ for (i in 1:length(unique_status)) {
 ```
 
 ```{r}
-# another way to do this is with the `table()` function!
+# pro tip: another way to do this is with the `table()` function!
 table(ER_status)
 ```
 
@@ -416,6 +425,15 @@ legend("bottomleft", fill = colors, legend = status, cex = 0.8)
 
 Triple-negative breast cancers are generally diagnosed based on the lack of three receptors known to fuel most breast cancers: estrogen receptors (ER), progesterone receptors (PR) and human epidermal growth factor receptor 2 (HER2). The most successful treatments for breast cancer target these receptors.
 
+To investigate these questions, follow the instructions and provide your answers in the 3 "parts" below for these variables:
+
++ `my_pc1_receptor`
++ `my_tripleneg_met_association`
++ `my_hpa_gene`
++ `my_hpa_is_enchanced`
++ `my_hpa_is_prognostic`
+
+
 ## PART 1: Inspecting the other 2/3 of "triple"
 
 Take a look at how the expression of PR and HER2 relate to the first principal component (PC1) in the data.
@@ -423,9 +441,7 @@ Take a look at how the expression of PR and HER2 relate to the first principal c
 ```{r}
 # Replace the blanks with the variable name for PR status (remember that PR
 # is short for "progesterone receptor")
-
-# TODO: REPLACE COLUMN NAME WITH "_____" BEFORE ACTIVITY
-PR_status <- brca_clinical_df$breast_carcinoma_progesterone_receptor_status
+PR_status <- brca_clinical_df$____
 
 colors <- color_by_type(unique(PR_status))
 status <- unique(PR_status)
@@ -441,9 +457,7 @@ legend("bottomleft", fill = colors, legend = status, cex = 0.8)
 # Replace the blanks with the variable name for HER2 status. Note: we're
 # specifically looking for HER2 status determined from immunohistochemistry 
 # lab processing
-
-# TODO: REPLACE COLUMN NAME WITH "_____" BEFORE ACTIVITY
-HER2_status <- brca_clinical_df$lab_proc_her2_neu_immunohistochemistry_receptor_status
+HER2_status <- brca_clinical_df$____
 
 colors <- scales::alpha(color_by_type(unique(HER2_status)))
 status <- unique(HER2_status)
@@ -459,7 +473,7 @@ Which of the two PC2 vs. PC1 plots is most informative? One of the two receptors
 
 ```{r}
 # fill in "PR" or "HER2"
-my_pc1_receptor <- "PR" # TODO: REPLACE WITH "" FOR ACTIVITY
+my_pc1_receptor <- ""
 ```
 
 
@@ -469,8 +483,8 @@ First, check your answer! If the expression status of one of these two genes is 
 
 
 ```{r, warning=FALSE}
-less_informative <- HER2_status # fill in "HER2_status" or "PR_status" 
-more_informative <- PR_status # fill in "HER2_status" or "PR_status"
+less_informative <- ____ # fill in HER2_status or PR_status - no quotes!
+more_informative <- ____ # fill in HER2_status or PR_status - no quotes!
 
 triple_negative <- (
   ER_status == "Negative" &  
@@ -506,7 +520,7 @@ Assume that PC1 is *positively correlated* with metastasis (we don't know for su
 
 ```{r}
 # fill in "more" or "less"
-my_tripleneg_met_association <- "more" # TODO: REPLACE WITH "" FOR ACTIVITY
+my_tripleneg_met_association <- "" 
 ```
 
 ## PART 3: Connecting PC1 to individual genes
@@ -548,15 +562,15 @@ Consider the first few genes. Search for one in the Human Protein Atlas (HPA), h
 
 ```{r}
 # Enter the name of your gene here. It should match one of the 6 names above.
-my_hpa_gene <- "TFF1" # TODO: REPLACE WITH "" FOR ACTIVITY
+my_hpa_gene <- "" 
 
 # Look at the section named "RNA EXPRESSION OVERVIEW". Is breast cancer one
 # of the diagnoses listed as "tissue enhanced"? Fill in "yes" or "no".
-my_hpa_is_enchanced <- "yes" # TODO: REPLACE WITH "" FOR ACTIVITY
+my_hpa_is_enchanced <- "" 
 
 # Look at the section named "PROGNOSTIC SUMMARY". Is the gene reported to be a
 # prognostic marker for breast cancer? Fill in "yes" or "no".
-my_hpa_is_prognostic <- "yes" # TODO: REPLACE WITH "" FOR ACTIVITY
+my_hpa_is_prognostic <- "" 
 ```
 
 
@@ -573,16 +587,136 @@ library(synapser)
 # synLogin('my_synapse_username', 'my_synapse_password',
 #          rememberMe = TRUE, silent = TRUE)
 
-# If you submitted for Module 0, this should work.
-# synLogin(silent = TRUE)
-submission <- submit_module_answers(module = 3, local = TRUE)
+# If you submitted for Module 0, 1, or 2, this should work.
+synLogin(silent = TRUE)
+submission <- submit_module_answers(module = 3)
 ```
 
 Congrats — you’ve reached the end of **Module 3**! You can now return to the **mini-DREAM Challenge** site on Synapse.
 
-```{r}
-submission
-```
-
 ---
 
+# Bonus: Image compression with PCA
+
+Just for fun, we've included a little activity to demonstrate how PCA (and dimensionality reduction) can be used to compress an image file. While this isn't exactly how common compression formats work — e.g., JPEG doesn't use PCA — the idea of capturing and preserving useful information (and discarding less useful information) is the same. Feel free to check it out!
+
+> WARNING: the code below might look strange compared to the R you've encountered in other modules. The style and some of the specific packages/functions are generally referred to as part of the "tidyverse" (which you can look up if you want to learn more). Don't worry too much about understanding the code here — you won't be tested on it!
+
+```{r, warning=FALSE, message=FALSE}
+library(imager)
+library(broom)
+library(tidyverse)
+```
+
+Get Synapse IDs for TIFF images of the **MDA-MB-231** breast cancer cell line from the motility study (from a single plate in the "Hyaluronic Acid Fibronectin" condition).
+
+```{r}
+img_file <- file.path(data_dir, "MDAMB231_plate_1_timelapse_61_001.tif")
+cell_img <- load.image(img_file)
+cell_img
+```
+
+## Viewing a cell image in R
+
+Here's what the image looks like, as downloaded.
+
+```{r}
+plot(cell_img)
+```
+
+If we save the file as a JPEG (with maximum quality), we can get a starting size.
+
+```{r}
+save.image(cell_img, "img.jpeg", quality = 1)
+fs::file_info("img.jpeg") %>% 
+  pluck("size")
+```
+
+## Getting PCs for the image matrix
+
+Convert the image to a matrix and compute principal components (PCs) with `prcomp`.
+
+```{r}
+cell_img_mat <- as.matrix(cell_img)
+cell_img_pca <- prcomp(cell_img_mat)
+```
+
+The number of PCs (not surprisingly) is equal to the dimensions of the original image.
+
+```{r}
+cell_img_pca_tidy <- tidy(cell_img_pca, matrix = "pcs") 
+nrow(cell_img_pca_tidy)
+```
+
+Let's check out the percent variance explained by the top 50 PCs.
+
+```{r}
+cell_img_pca_tidy %>% 
+  slice(1:50) %>%
+  ggplot(aes(x = PC, y = percent)) +
+  geom_col(alpha = 0.7)
+```
+
+A fair amount of variance in the image data is explained by PC1. 
+
+## Using PC projections to compress the image
+
+I'll create a function to pick out the top **`num_pcs`** to create a compressed version of the image. Plotting the reconstructed image from PC1 only:
+
+```{r}
+compress_img <- function(img_pca, num_pcs) {
+  img_pca$x[, 1:num_pcs] %*% t(img_pca$rotation[, 1:num_pcs]) %>% 
+    t() %>% 
+    as.cimg()
+}
+compress_img(cell_img_pca, num_pcs = 1) %>% 
+  plot()
+```
+
+So, a certainly a hint of the original... (yes, the image has been rotated 90 degrees — let's not worry about that for now)
+
+What about using the top 10 PCs?
+
+```{r}
+compress_img(cell_img_pca, num_pcs = 10) %>% 
+  plot()
+```
+
+Approaching the compression a bit more systematically, I can figure out how many PCs would be needed to capture 75% of the variation (~information) in the image data.
+
+```{r}
+cell_img_pca_tidy %>% 
+  ggplot(aes(x = PC, y = cumulative)) +
+  geom_col(alpha = 0.7) +
+  geom_vline(aes(xintercept = max(PC[cumulative <= 0.75])),
+             linetype = 2, size = 1, colour = "blue3")
+```
+
+```{r}
+pcs_75 <- cell_img_pca_tidy %>% 
+    filter(cumulative <= .75) %>%
+    top_n(1, PC) %>%  
+    pluck("PC")
+pcs_75
+```
+
+That's only **`r pcs_75`** PCs (out of `r nrow(cell_img_pca_tidy)`) to reconstruct a fairly accurate version of the image!
+
+```{r}
+compress_img(cell_img_pca, num_pcs = pcs_75) %>% 
+  plot()
+```
+
+I can now save the compressed image as a JPEG to see the resulting file size.
+
+```{r}
+cell_img_compressed <- compress_img(cell_img_pca, num_pcs = pcs_75)
+
+save.image(cell_img_compressed, "img_compressed.jpeg", quality = 1)
+fs::file_info("img_compressed.jpeg") %>% 
+  pluck("size")
+```
+
+That's about 60% of the original file size. Success!
+
+---
