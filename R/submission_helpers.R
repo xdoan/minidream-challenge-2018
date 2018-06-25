@@ -53,7 +53,28 @@ create_module2_submission <- function() {
   submission_filename
 }
 
-submit_module_answers <- function(module) {
+create_module3_submission <- function() {
+  submission_filename <- paste(Sys.getenv("USER"), "activity-3.yml", sep = "_")
+  
+  pc1_receptor <<- my_pc1_receptor
+  tripleneg_met_association <<- my_tripleneg_met_association
+  hpa_gene <<- my_hpa_gene
+  hpa_is_enchanced <<- my_hpa_is_enchanced
+  hpa_is_prognostic <<- my_hpa_is_prognostic
+  
+  answers <- list(
+    pc1_receptor = pc1_receptor, 
+    tripleneg_met_association = tripleneg_met_association, 
+    hpa_gene = hpa_gene, 
+    hpa_is_enchanced = hpa_is_enchanced,
+    hpa_is_prognostic = hpa_is_prognostic
+  )
+  
+  write_yaml(answers, submission_filename)
+  submission_filename
+}
+
+submit_module_answers <- function(module, local = FALSE) {
   if (is.numeric(module)) {
     module <- as.character(module)
   }
@@ -61,23 +82,37 @@ submit_module_answers <- function(module) {
     module,
     "0" = create_module0_submission(),    
     "1" = create_module1_submission(),
-    "2" = create_module2_submission()
+    "2" = create_module2_submission(),
+    "3" = create_module3_submission()
   )
   submission_folder <- switch(
     module,
     "0" = "syn12369913",
     "1" = "syn12440746",
-    "2" = "syn12554002"
+    "2" = "syn12554002",
+    "3" = "syn12617172"
   )
-  activity_submission <- synStore(
-    File(path = submission_filename, parentId = submission_folder)
-  )
-  submission <- synSubmit(evaluation = "9612371", entity = activity_submission)
   
-  message("")
-  message(paste0("Successfully submitted file: '", submission_filename, "'"))
-  message(paste0("... stored as '", fromJSON(submission$entityBundleJSON)$entity$id, "'"))
-  message(paste0("Submission ID: '", submission$id))
+  if (!local) {
+    
+    activity_submission <- synStore(
+      File(path = submission_filename, parentId = submission_folder)
+    )
+    submission <- synSubmit(evaluation = "9612371", 
+                            entity = activity_submission)
+    
+    message("")
+    message(paste0("Successfully submitted file: '", submission_filename, "'"))
+    message(paste0("... stored as '", 
+                   fromJSON(submission$entityBundleJSON)$entity$id, "'"))
+    message(paste0("Submission ID: '", submission$id))
+    
+    return(submission)
+  } else {
+    print(paste0("modules/module", module, "/.eval/eval_fxn.R"))
+    source(paste0("modules/module", module, "/.eval/eval_fxn.R"))
+    return(as.data.frame(score_submission(submission_filename)))
+  }
   
-  return(submission)
+
 }
