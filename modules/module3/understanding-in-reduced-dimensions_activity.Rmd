@@ -542,12 +542,12 @@ For example, the first column of the loading value matrix contains the loading v
 
 ```{r}
 # Sort and inspect PC1 loading values
-pc1_loadings <- loading_values_mat[, 1]
+pc1_loadings <- loading_values_mat[____] # select the first column only
 pc1_loadings_sorted <- sort(pc1_loadings, decreasing = FALSE)
 
 
 # Get the first 6 values from `pc1_loadings_sorted`
-head(pc1_loadings_sorted)
+____(pc1_loadings_sorted)
 ```
 
 
