@@ -101,8 +101,8 @@ score_submission <- function(submission_filename) {
   res <- chisq.test(counts)
   
   pval_match <- all_equal(
-    round(res$p.value, digits = 5),
-    round(answers$p_value, digits = 5)
+    round(res$p.value, digits = 4),
+    round(answers$p_value, digits = 4)
   ) %>%
     isTRUE()
   
