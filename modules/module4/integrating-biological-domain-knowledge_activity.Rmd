@@ -174,14 +174,14 @@ Check out the documentation for the `enrichGO()` function to learn a bit more ab
 ?enrichGO
 ```
 
-Now we'll actually run the function and check out the results.
+Now we'll actually run the function and check out the results (this will take a few moments to run).
 
 ```{r, warning=FALSE}
 ego_pson_pos <- enrichGO(
   gene = gene_pson_pos,
   universe = names(geneList_pson),
   OrgDb = org.Hs.eg.db,
-  keytype = "ENSEMBL",
+  keyType = "ENSEMBL",
   ont = "BP",
   pAdjustMethod = "BH",
   pvalueCutoff = 0.01,
@@ -209,7 +209,7 @@ ego_pson_neg <- enrichGO(
   gene = gene_pson_neg,
   universe = names(geneList_pson),
   OrgDb = org.Hs.eg.db,
-  keytype = "ENSEMBL",
+  keyType = "ENSEMBL",
   ont = "CC",
   pAdjustMethod = "BH",
   pvalueCutoff = 0.01,
@@ -233,7 +233,7 @@ ego_pson_pos <- enrichGO(
   gene = gene_pson_pos,
   universe = names(geneList_pson),
   OrgDb = org.Hs.eg.db,
-  keytype = "ENSEMBL",
+  keyType = "ENSEMBL",
 
   # to change the GO aspect, change the ont argument.  It can be "BP", "MF", or "CC"
 
@@ -302,7 +302,7 @@ ego_pson_abs <- enrichGO(
   gene = gene_pson_abs,
   universe = names(geneList_pson),
   OrgDb = org.Hs.eg.db,
-  keytype = "ENSEMBL",
+  keyType = "ENSEMBL",
   ont = my_go_subontology,
   pAdjustMethod = "BH",
   pvalueCutoff = 0.01,
