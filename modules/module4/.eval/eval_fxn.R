@@ -6,7 +6,8 @@ library(rprojroot)
 
 score_submission <- function(submission_filename) {
   
-  answers <- yaml.load_file(submission_filename)
+  answers <- yaml.load_file(submission_filename) %>% 
+    map(str_trim)
   gene_count <- as.integer(answers$gene_count)
   gc_actual <- 497L
   count_match <- gene_count == gc_actual
@@ -14,7 +15,13 @@ score_submission <- function(submission_filename) {
                 gc = gc_actual)
   
   go_subontology <- answers$go_subontology
-
+  if (is.null(go_subontology)) {
+    go_subontology <- go_results %>% 
+      keep(~ .$top_go_id == answers$top_go_id) %>% 
+      names()
+    answers$go_subontology <- go_subontology
+  }
+  
   go_results <- list(
     BP = list(
       name = "biological process",
@@ -32,7 +39,6 @@ score_submission <- function(submission_filename) {
       go_description = "adherens junction"
     )
   )
-  
   
   go_values <- go_results[[go_subontology]]
   msg_2 <- glue("For {name} ({subont}), I found that '{term}' ({id}) was the ",
