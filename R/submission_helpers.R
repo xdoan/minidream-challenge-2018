@@ -78,6 +78,7 @@ create_module4_submission <- function() {
   submission_filename <- paste(Sys.getenv("USER"), "activity-4.yml", sep = "_")
   
   gene_count <<- my_gene_count
+  go_subontology <<- my_go_subontology
   top_go_id <<- my_top_go_id
   go_description <<- my_go_description
   fav_go_term <<- my_fav_go_term
@@ -85,6 +86,7 @@ create_module4_submission <- function() {
   
   answers <- list(
     gene_count = gene_count, 
+    go_subontology = go_subontology,
     top_go_id = top_go_id, 
     go_description = go_description, 
     fav_go_term = fav_go_term,
