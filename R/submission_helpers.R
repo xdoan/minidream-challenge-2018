@@ -74,6 +74,27 @@ create_module3_submission <- function() {
   submission_filename
 }
 
+create_module4_submission <- function() {
+  submission_filename <- paste(Sys.getenv("USER"), "activity-4.yml", sep = "_")
+  
+  gene_count <<- my_gene_count
+  top_go_id <<- my_top_go_id
+  go_description <<- my_go_description
+  fav_go_term <<- my_fav_go_term
+  rationale <<- my_rationale
+  
+  answers <- list(
+    gene_count = gene_count, 
+    top_go_id = top_go_id, 
+    go_description = go_description, 
+    fav_go_term = fav_go_term,
+    rationale = rationale
+  )
+  
+  write_yaml(answers, submission_filename)
+  submission_filename
+}
+
 submit_module_answers <- function(module, local = FALSE) {
   if (is.numeric(module)) {
     module <- as.character(module)
@@ -83,14 +104,16 @@ submit_module_answers <- function(module, local = FALSE) {
     "0" = create_module0_submission(),    
     "1" = create_module1_submission(),
     "2" = create_module2_submission(),
-    "3" = create_module3_submission()
+    "3" = create_module3_submission(),
+    "4" = create_module4_submission()
   )
   submission_folder <- switch(
     module,
     "0" = "syn12369913",
     "1" = "syn12440746",
     "2" = "syn12554002",
-    "3" = "syn12617172"
+    "3" = "syn12617172",
+    "4" = "syn13363278"
   )
   
   if (!local) {
