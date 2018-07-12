@@ -14,14 +14,6 @@ score_submission <- function(submission_filename) {
   msg_1 <- glue("I ended up with {gc} genes in my gene list.", 
                 gc = gc_actual)
   
-  go_subontology <- answers$go_subontology
-  if (is.null(go_subontology)) {
-    go_subontology <- go_results %>% 
-      keep(~ .$top_go_id == answers$top_go_id) %>% 
-      names()
-    answers$go_subontology <- go_subontology
-  }
-  
   go_results <- list(
     BP = list(
       name = "biological process",
@@ -39,6 +31,14 @@ score_submission <- function(submission_filename) {
       go_description = "adherens junction"
     )
   )
+  
+  go_subontology <- answers$go_subontology
+  if (is.null(go_subontology)) {
+    go_subontology <- go_results %>% 
+      keep(~ .$top_go_id == answers$top_go_id) %>% 
+      names()
+    answers$go_subontology <- go_subontology
+  }
   
   go_values <- go_results[[go_subontology]]
   msg_2 <- glue("For {name} ({subont}), I found that '{term}' ({id}) was the ",
