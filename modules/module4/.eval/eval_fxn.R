@@ -11,20 +11,23 @@ score_submission <- function(submission_filename) {
   gc_actual <- 497L
   count_match <- gene_count == gc_actual
   msg_1 <- glue("I ended up with {gc} genes in my gene list.", 
-                c = gc_actual)
+                gc = gc_actual)
   
   go_subontology <- answers$go_subontology
 
   go_results <- list(
     BP = list(
+      name = "biological process",
       top_go_id = "GO:0022612",
       go_description = "gland morphogenesis"
     ),
     MF = list(
+      name = "molecular function",
       top_go_id = "GO:0005520",
       go_description = "insulin-like growth factor binding"
     ),
     CC = list(
+      name = "cellular component",
       top_go_id = "GO:0005912",
       go_description = "adherens junction"
     )
@@ -32,8 +35,9 @@ score_submission <- function(submission_filename) {
   
   
   go_values <- go_results[[go_subontology]]
-  msg_2 <- glue("For {subont}, I found that '{term}' ({id}) was the most ",
-                "over-represented GO term",
+  msg_2 <- glue("For {name} ({subont}), I found that '{term}' ({id}) was the ",
+                "most over-represented GO term",
+                name = go_values$name,
                 subont = go_subontology,
                 term = go_values$go_description,
                 id = go_values$top_go_id)
@@ -42,3 +46,4 @@ score_submission <- function(submission_filename) {
   answers["comment"] <- paste(msg_1, msg_2)
   answers
 }
+
