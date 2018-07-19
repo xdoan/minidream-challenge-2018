@@ -1,0 +1,141 @@
+---
+title: "TCGA BRCA Data Exploration"
+output: html_notebook
+---
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(synapser)
+library(stringr)
+library(janitor)
+library(ggthemes)
+library(patchwork)
+library(ggalluvial)
+library(forcats)
+library(annotables)
+```
+
+## Data collection
+
+### Clinical data
+
+```{r, warning=FALSE, message=FALSE}
+metabric_clinical_df <- read_tsv("../data/raw/METABRIC/METABRIC_discovery.info.tsv") %>% 
+  rename_at(vars(contains("NOT_IN_OSLOVAL")), funs(str_replace(., "NOT_IN_OSLOVAL_", "")))
+```
+
+
+Here's a glimpse of the information included in `metabric_clinical_df`:
+
+```{r}
+dim(metabric_clinical_df)
+summary(metabric_clinical_df)
+```
+
+
+### Expression data
+
+**Note:** I'll use the `annotables` package to augment the provided Entrez gene IDs with some additional field to provide more context: 
+
++ `ensgene` (which I'll rename to `gene_id` to match the PS-ON data): Ensembl gene ID
++ `symbol`: HGNC gene symbol
++ `biotype`: Protein coding, pseudogene, mitochondrial tRNA, etc.
++ `description`: Full gene name/description
+
+```{r include=FALSE}
+metabric_disc_expr_file <- "../data/metabric_disc_expr_df.RData"
+metabric_val_expr_file <- "../data/metabric_val_expr_df.RData"
+if (!fs::file_exists(metabric_disc_expr_file)) {
+  # download and load normalized, batch-corrected expression data
+  metabric_disc_expr_df <- read_tsv(
+    "../data/raw/METABRIC/METABRIC_discovery.Illumina_HT12.matrix.txt",
+    progress = FALSE
+  )
+  
+  # update/augment gene identifiers; subset to protein coding genes ; 
+  # remove duplicate IDs  gene_df <- tcga_expr_df %>% 
+  select(symbol = Name) %>% 
+    filter(symbol != "---") %>% 
+    left_join(grch37, by = "symbol") %>% 
+    filter(biotype == "protein_coding") %>% 
+    dplyr::select(gene_id = ensgene, entrez, symbol, biotype, description) %>% 
+    filter(!duplicated(entrez) & !duplicated(gene_id))
+
+  # filter genes
+  metabric_disc_expr_df <- metabric_disc_expr_df %>% 
+    left_join(gene_df, ., by = c("symbol" = "Name")) %>% 
+    group_by(gene_id, symbol) %>% 
+    summarise_at(vars(starts_with("MB_")), funs(max))
+  
+  # make sure gene info lines up with expression data
+  gene_df <- gene_df %>% 
+    dplyr::filter(gene_id %in% metabric_expr_df$gene_id) %>% 
+    arrange(gene_id)
+    
+  save(metabric_disc_expr_df, file = metabric_disc_expr_file)
+  # also save TSV
+  # write_tsv(brca_expr_norm_df, 
+  #           path = str_replace(brca_expr_norm_file, "RData", "tsv"))
+  
+  # filter validation data as well
+  metabric_val_expr_df <- read_tsv(
+    "../data/raw/METABRIC/METABRIC_validation.Illumina_HT12.matrix.txt",
+    progress = FALSE
+  )
+  
+  metabric_val_expr_df <- metabric_val_expr_df %>% 
+    left_join(gene_df, ., by = c("symbol" = "Name")) %>% 
+    group_by(gene_id, symbol) %>% 
+    summarise_at(vars(starts_with("MB_")), funs(max))
+  
+  save(metabric_val_expr_df, file = metabric_val_expr_file)
+
+  save(gene_df, file = "../data/metabric_expr_gene_info.RData")
+  # also save TSV
+  write_tsv(gene_df, path = "../data/tcga_brca_expr_gene_info.tsv")
+
+  } else {
+  load(brca_expr_norm_file)
+  load("../data/tcga_brca_expr_gene_info.RData")
+}
+```
+
+---
+
+## Data formatting
+
+### Clinical data
+
+I'll subset the clinical dataframes to match the selection of samples with expression data, then save the results.
+
+```{r}
+metabric_disc_clin_df <- names(metabric_disc_expr_df)[-c(1:2)] %>% 
+  tibble(metabric_id = .) %>% 
+  left_join(metabric_clinical_df, by = c("metabric_id" = "Array")) %>% 
+  mutate(survival_5y = (T / 365.25) >= 5,
+         censored = last_follow_up_status %in% c("a", "d-o.c."))
+
+metabric_val_clin_df <- names(metabric_val_expr_df)[-c(1:2)] %>% 
+  tibble(metabric_id = .) %>% 
+  left_join(metabric_clinical_df, by = c("metabric_id" = "Array")) %>% 
+  mutate(survival_5y = (T / 365.25) >= 5,
+         censored = last_follow_up_status %in% c("a", "d-o.c."))
+
+metabric_val_masked_clin_df <- metabric_val_clin_df %>% 
+  select(-T, -OS_Time)
+
+save(metabric_disc_clin_df, file = "../data/metabric_disc_clin_df.RData")
+save(metabric_val_clin_df, file = "../data/metabric_val_clin_df.RData")
+save(metabric_val_masked_clin_df, file = "../data/metabric_val_masked_clin_df.RData")
+```
+
+
+```{r}
+View(metabric_disc_clin_df)
+```
+
+
+
+
