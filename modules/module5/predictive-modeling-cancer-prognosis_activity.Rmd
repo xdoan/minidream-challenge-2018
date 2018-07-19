@@ -1,0 +1,523 @@
+---
+title: "Predictive modeling for cancer prognosis"
+author: "Andrew Gentles"
+date: "7/19/2018"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+set_basepath <- function(type = c("data", "R")) {
+  if (stringr::str_length(Sys.which("rstudio-server"))) {
+    file.path("/home/shared", type)
+  } else {
+    here::here(type)
+  }
+}
+
+data_dir <- set_basepath("data")
+scripts_dir <- set_basepath("R")
+source(file.path(scripts_dir, "submission_helpers.R"))
+```
+
+# About this activity
+
+This module will introduce you to loading and manipulating the data from the breast cancer METABRIC dataset, visualizing and working with **gene expression** measurements, and building predictive models based on the expression of many different genes (and clinical data too).
+
+The METABRIC dataset is from another large breast cancer patient study and was actually used for the original DREAM Breast Cancer Prognosis Challenge. After taking an initial look at modeling survival in the TCGA BRCA cohort, we realized there wasn't much interesting to see. This is a useful lesson in making sure you have the right data for the analysis! In a [study](https://www.ncbi.nlm.nih.gov/pubmed/29625055) published earlier this year, a group of researchers carefully assessed which clinical outcomes can be reliably used for modeling across TCGA cancer types — this study also produced the **TCGA Pan-Cancer Clinical Data Resource (CDR)** dataset that we've seen in a couple modules.
+
+For now, we've switched to the METABRIC study, where we know from previous experience there are at least some strong relationships between gene expression and survival. 
+
+---
+
+# Loading & inspecting data
+
+Let's load the data — both the expression matrix and a table of clinical information. They are saved conveniently in files of type .RData as with previous modules. These are binary files (i.e., not human readable) that store multiple R objects (results) that you create in the process of an R analysis. We'll load the datasets, and list what we loaded with the `ls()` command,
+
+```{r}
+load(file.path(data_dir, "metabric_disc_expr_df.RData"))
+load(file.path(data_dir, "metabric_disc_clin_df.RData"))
+load(file.path(data_dir, "metabric_expr_gene_info.RData"))
+ls()
+```
+
+
+The clinical data frame is a bit unwieldy — we can use **`View()`** to take a look. In RStudio, you can also click on the variable under the **Environment** tab in the upper right panel. **Reminder:** running the chunk below will open the viewer in a new tab; you can switch back to this tab to resume the activity.
+
+```{r}
+# remove the '#' before View before running
+View(metabric_disc_clin_df)
+```
+
+
+Reminder: We can find the dimensions of a matrix or data frame with the `dim()` command, to see just how large the expression data matrix is...
+
+```{r}
+dim(metabric_disc_clin_df)
+dim(metabric_disc_expr_df)
+```
+
+Each row of the clinical data frame is one patient, and each column of the expression data frame is for one patient (except for the first two, which store the gene information for each row). Let's check whether they're both in the same order:
+
+```{r}
+metabric_disc_clin_df$metabric_id[1:10]
+
+# replace the blanks here with the function to get column names
+_____(metabric_disc_expr_df)[3:12]
+```
+
+Let's convert the expression data frame into a matrix for more convenient use below:
+
+```{r}
+metabric_disc_expr_mat <- as.matrix(metabric_disc_expr_df[, -c(1:2)]) 
+rownames(metabric_disc_expr_mat) <- metabric_disc_expr_df$symbol
+
+metabric_disc_expr_mat[1:5, 1:5]
+```
+
+And it never hurts to do yet another check to make sure nothing went astray... The `match()` function tells us the position in the 2nd vector where each element in the 1st vector can be found — ideally, we want these numbers to be increasing from 1 to the length of the vector.
+
+```{r}
+dim(metabric_disc_clin_df)
+dim(metabric_disc_expr_mat)
+
+match(metabric_disc_clin_df$metabric_id, colnames(metabric_disc_expr_mat))
+```
+
+Now we are ready to do some actual analysis!
+
+---
+
+# Exploring AURKA expression & survival
+
+We happen to know that high AURKA expression in a tumor is bad for the patient's outcome (https://doi.org/10.1093/bioinformatics/btn374). AURKA (Aurora kinase A) encodes for a protein that is involved in regulation of progression through the cell cycle. Various studies have associated it with tumour progression and it is thought to promote metastasis.  
+
+```{r}
+aurka_row <- which(rownames(metabric_disc_expr_mat) == "AURKA")
+aurka_row
+```
+
+```{r}
+aurka <- as.vector(metabric_disc_expr_mat[aurka_row, ])
+aurka
+```
+
+How is the expression of AURKA related to being alive at 5 years? Here are a few different ways to look at the relationship.
+
+```{r}
+boxplot(aurka ~ metabric_disc_clin_df$survival_5y, 
+        xlab = "Alive at 5 yrs", ylab = "AURKA expression level")
+stripchart(aurka ~ metabric_disc_clin_df$survival_5y, 
+           vertical = TRUE, method = "jitter", pch = '.', cex = 3, add = TRUE)
+```
+
+```{r}
+summary(lm(aurka ~ metabric_disc_clin_df$survival_5y))
+```
+
+## Removing censored patients
+
+Another way of looking at things is to just take the patients who *died of disease*, and to look at how long it was before that occurred. To do that, we'll want to exclude the rows and columns for patients who alive at the last time they were followed *OR* who died of other causes. These patients are known as "censored" events. 
+
+```{r}
+table(metabric_disc_clin_df$last_follow_up_status)
+```
+
+Rather than filtering out patients with `last_follow_up_status` equal to `a` or `d-o.c.`, we can actually use the `censored` column in the data frame. You'll see that the number of censored patients (674) is equal to the total of alive (548) and died of other causes (126) patients.
+
+```{r}
+table(metabric_disc_clin_df$censored)
+```
+
+So, now we'll drop the censored patients from the data.
+
+```{r}
+drop_pats <- which(metabric_disc_clin_df$censored)
+dead_clin <- metabric_disc_clin_df[-drop_pats, ]
+dead_expr <- metabric_disc_expr_mat[, -drop_pats]
+dim(dead_clin)
+dim(dead_expr)
+```
+
+That's less than half of patients in total — though note that only 259 were specifically indicated to have died from breast cancer; the 46 patients labelled as `d` we *think* died of cancer, but the cause for these patients could be unknown. This is often a problem — the unknown or "other cause"" might have been something completely unrelated, or something that was indirectly caused by having cancer, so we usually want to be careful about how we treat these cases.
+
+## Modeling survival and AURKA expression
+
+Let's see how the expression level of AURKA is related to time-to-death with a plot that includes a trend line representing the linear model from `lm()`.
+
+```{r}
+# make sure to remove censored patients from the `aurka` vector
+aurka_dead = aurka[-drop_pats]
+
+plot(dead_clin$T ~ aurka_dead)
+
+aurka_model <- lm(dead_clin$T ~ aurka_dead)
+abline(aurka_model, col = "red")
+```
+
+There are several things in the output of `lm()` that might be interesting, and the `summary()` of it has even more detail, such as p-values. Here we store it as an object and then see what it includes.
+
+```{r}
+aurka_model_summary <- summary(aurka_model)
+aurka_model_summary
+```
+
+Specifically, we can pull out the estimate (slope) for how AURKA is associated with time to death, and the p-value.
+
+```{r}
+coef_aurka_model = coefficients(aurka_model_summary)
+
+slope = coef_aurka_model[2, 1]
+pval = coef_aurka_model[2, 4]
+
+slope
+pval
+```
+
+## Including clinical variables with expression
+
+### Continuous variables
+
+The number of lymph nodes found to be positive for cancer cells at the time of diagnosis can also be a strong predictor of time until the person dies. We would probably want to allow for these variables like these in a survival model. 
+
+There are many ways to include multiple variables in a model — one would be to fit the time to death as a function of both positive lymph node coudnt and other variables (e.g., AURKA expression). We can do this easily for the combination of positive lymph nodes and AURKA with `lm()`.
+
+```{r}
+# replace the blanks with the function we use to fit a linear model
+summary(__(dead_clin$T ~ dead_clin$lymph_nodes_positive + aurka_dead))
+```
+
+By "controlling" for survival differences related to positive lymph nodes, we're able to focus our model on differences that might be more specifically related to AURKA expression. If, alternatively, we included `lymph_nodes_positive` and the effect of `aurka_dead` disappeared, we might deduce that these variables were *confounded* in some way.
+
+### Categorical variables
+
+We've also learned about how ER expression status can be an indicator of survival. In this case, we have to "categories" among our patients: "positive" for ER (`+`) and "negative" for ER (`-`).
+
+```{r}
+table(dead_clin$ER.Expr)
+```
+
+```{r}
+summary(lm(dead_clin$T ~ dead_clin$ER.Expr + aurka_dead))
+```
+
+Your first observation here might be: "what happened to ER `-`?" When given categorical variables, R will treat one of the values as the intercept for the line it fits. We can therefore interpret the remaining coefficient `ER.Expr+` as "the change in survival time when ER status changes from `-` to `+`". As we might expect, patients who are ER+ are predicted to survive longer.
+
+### Categorical variables ...?
+
+How about another common clinical variable, such as tumor "grade"?
+
+```{r}
+table(dead_clin$grade)
+```
+
+Including grade with AURKA expression would look like this:
+
+```{r}
+summary(lm(dead_clin$T ~ dead_clin$grade + aurka_dead))
+```
+
+We see that increasing grade has a negative relationship with survival time (as we might expect), and that relationship is significant — great! But wait... something is funny about how `lm()` treated the `grade` variable. Can you tell what's wrong? Think about how the model looked when we considered the number of positive lymph nodes compared to ER status.
+
+> Cue Jeopardy music...
+
+The problem here is that R doesn't know grade numbers (1, 2, 3) represent different categories, so it just treats them as continuous values. Let's see what that looks like with a plot of time versus grade.
+
+```{r}
+plot(dead_clin$T ~ dead_clin$grade)
+```
+
+What we need to do is convert the `grade` variable into a **`factor`** — this tells R to treat each "level" of the factor as a distinct category. Try the plot now.
+
+```{r}
+plot(dead_clin$T ~ as.factor(dead_clin$grade))
+```
+
+Better! How does our model look?
+
+```{r}
+summary(lm(dead_clin$T ~ as.factor(dead_clin$grade) + aurka_dead))
+```
+
+Note that for each increasing grade above "1" (denoted as the `Intercept` term), the relationship with survival time becomes more negative. While grade 3 shows a negative relationship relative to grade 2, the lack of statistical significance (p > 0.05) suggests that the evidence for this relationship isn't super strong.
+
+We won't actually include grade in our models below. Long story short, interpreting the relationship between survival time and tumor grade (at least for this set of patients) is a bit confusing. 
+
+---
+
+# Modeling survival for all genes
+
+Putting all these bits together, we can write a function that takes the time to death (y below) does a fit to some variable x, such as the expression of AURKA, and extracts the slope (direction of the association) and statistical significance.
+
+```{r}
+# Do a linear fit of y ~ x and return the slope and p-value
+gene_lm <- function(y, x) {
+    gene_model_summary <- NULL
+    pval <- NA
+    slope <- NA
+    try(gene_model_summary <- summary(lm(y ~ x)))
+    if (!is.null(gene_model_summary)) {
+        coef_gene_model <- coefficients(gene_model_summary)
+        pval = coef_gene_model[2, 4]
+        slope = coef_gene_model[2, 1]
+    }
+    return(c(pval, slope))
+}
+```
+
+Check this got the same as we had before.
+
+```{r}
+gene_lm(dead_clin$T, aurka_dead)
+```
+
+Now, we could check every gene in the expression matrix to see if it is significantly correlated with time to death of the METABRIC patients. Fortunately with R, we can easily loop over all the genes. Altogether, there are 24,368 genes measured. For now, let's just take the first 5000 for speed. We will create an empty matrix of results that we can store the p-value and slope in for each gene.
+
+Note that these models aren't including any information about stage or grade.
+
+```{r}
+# If we were doing all genes, `ngenes` would be nrow(dead_expr), i.e. the number of rows of genes
+ngenes <- 5000
+lm_results = matrix(nrow = ngenes, ncol = 2, data = NA)
+colnames(lm_results) <- c("pval", "slope")
+rownames(lm_results) <- rownames(dead_expr)[1:ngenes]
+for (i in 1:ngenes) {
+    lm_results[i, ] <- gene_lm(dead_clin$T, dead_expr[i,])
+}
+```
+
+And we check on AURKA again.
+
+```{r}
+lm_results[rownames(lm_results) == "AURKA", ]
+```
+
+That's it. We now have the regression of every gene against time to death. There are some other things we need to do in practice, like correcting the p-values for the number of tests we did. If you check 1000 genes, then for p = 0.01 you would expect roughly 10 genes to be that significant by chance (0.01*1000). From the table generated, we can order by p-value to see which genes are most statistically significantly associated with death (either favourable or unfavourably).
+
+```{r}
+lm_results = lm_results[order(lm_results[, 1]), ]
+
+# output as a data frame so that R Notebook formats the table nicely
+as.data.frame(lm_results)
+```
+
+---
+
+# mini-DREAM Challenge  
+
+**QUESTION:** How well can we predict survival based on the expression of a single gene?
+
+Now that you've built a model to predict survival time based on gene expression, we can apply it to the samples in a new dataset and submit our predictions to the **mini-DREAM Challenge**.
+
+First, load the challenge validation data:
+
+```{r}
+load(file.path(data_dir, "metabric_val_expr_df.RData"), verbose = TRUE)
+load(file.path(data_dir, "metabric_val_masked_clin_df.RData"), verbose = TRUE)
+```
+
+This is a *distinct* set of samples from the ones we were looking at above. If you notice the word "masked" in the variable name of the clinical data frame, that's because we've "hidden" the survival time for these patients. You'll train a model based on *other* variables in the dataset (expression or clinical) and then find out how well your prediction matched the real answer.
+
+## Formatting the challenge data
+
+Once again, double check that our sample IDs are in the same order:
+
+```{r}
+metabric_val_masked_clin_df$metabric_id[1:10]
+names(metabric_val_expr_df)[3:12]
+```
+
+```{r}
+metabric_val_expr_mat <- as.matrix(metabric_val_expr_df[, -c(1:2)]) 
+rownames(metabric_val_expr_mat) <- metabric_val_expr_df$symbol
+
+metabric_val_masked_clin_df[1:5,1:5]
+metabric_val_expr_mat[1:5,1:5]
+```
+
+Because we only aim to predict survival time for those patients who ultimately die, we must also remove censored samples (the patients who did not die during followup) from both the clinical table rows, and the expression data columns.
+
+```{r}
+chal_drop_pats <- which(metabric_val_masked_clin_df$censored)
+chal_dead_clin <- metabric_val_masked_clin_df[-drop_pats, ]
+chal_dead_expr <- metabric_val_expr_mat[, -drop_pats]
+dim(chal_dead_clin)
+dim(chal_dead_expr)
+```
+
+
+## Training our model
+
+Now we'll add gene expression into our data frames with clinical variables — this makes it easier for us to train and apply our model with the same syntax. **AVP** came out with the most significant p-value, and it seems to have a beneficial effect on outcome — the higher it is, the longer patients survive. The following will select it as the final model to submit. You might want to pick a different one so that we see a variety of different genes in the validation step.
+
+> This is where you can change to a different gene if you want to pick something else out of the top ranked ones from the discovery part above!
+
+> Hint: there's no guarantee that the top gene from the training data will also be the best predictor for the challenge samples!
+
+> Since metastasis is a major driver of survival, it would be interesting to see if some of the genes that you identified from looking at PS-ON in Module 1 are important. Check out the [Module 1 scoreboards](https://www.synapse.org/#!Synapse:syn12105406/wiki/566100) for some other gene ideas to try.
+
+```{r}
+# pick the gene to use in your model here!
+my_model_gene <- ""
+
+# add gene expression to the training clinical table above
+gene_exp <- as.vector(dead_expr[my_model_gene, ])
+dead_clin$gene_exp <- gene_exp
+
+# add gene expression to the challenge clinical table
+chal_gene_exp <- as.vector(chal_dead_expr[my_model_gene, ])
+chal_dead_clin$gene_exp <- chal_gene_exp
+```
+
+And now to train our model for survival as a function of ER status and gene expression...
+
+```{r}
+er_gene_model <- lm(T ~ ER.Expr + gene_exp, data = dead_clin)
+summary(er_gene_model)
+```
+
+Look at the coefficient named `gene_exp`. Based on this coefficient, is the relationship between the expression of your gene and survival time positive or negative? Use the `Signif. codes` from the summary to report how significant this relationship is estimated to be.
+
+```{r}
+# fill in "negative" or "positive"
+my_gene_relationship <- ""
+
+# fill in "***", "**", "*", ".", or " " based on the signif. code for the
+# gene_exp coefficient 
+my_gene_significance <- ""
+```
+
+
+Take a minute to look up "R-squared" (we didn't really get into much detail about this metric above). Based on the R-squared value for the `er_gene_model` you just trained, do you think this model will be generally predictive of survival in breast cancer patients? Why or why not?
+
+```{r}
+# fill in your explanation here
+my_model_judgement <- ""
+```
+
+
+## Predicting survival with our model
+
+Now, we can use the `predict.lm()` function, which will use the coefficient and estimate we learned above, and apply it to the held out challenge data to predict their time to death.
+
+```{r}
+my_prediction <- data.frame(metabric_id = chal_dead_clin$metabric_id, 
+                            T = predict.lm(er_gene_model, 
+                                           newdata = chal_dead_clin))
+my_prediction
+```
+
+Unfortunately, a number of our challenge samples are also missing predictions (`NA` for the `T` variable). 
+
+```{r}
+table(is.na(my_prediction$T))
+```
+
+This is likely due to the stage information missing for these samples. We'll submit anyway (the scoring function should ignore the missing samples when comparing to the true survival times), and see what happens.
+
+## Submitting the prediction
+
+You're now ready to submit the prediction. Just run the chunk below, a file with your prediction will be uploaded to Synapse and submitted to the challenge. You'll be able to see the results of your prediction on the mini-DREAM scoreboards, with the submission ID that gets printed below.
+
+```{r}
+library(synapser)
+
+# If you didn't submit an answer for a previous module, remove the '#'s
+# on the next 2 lines and enter your Synapse username and password
+# before running this chunk.
+
+# synLogin('my_synapse_username', 'my_synapse_password',
+#          rememberMe = TRUE, silent = TRUE)
+
+# If you submitted for Module 0, 1, 2, 3, or 4, this should work.
+synLogin(silent = TRUE)
+submission <- submit_module_answers(module = 5)
+```
+
+Congrats — you’ve reached the end of **Module 5**! You can now return to the **mini-DREAM Challenge** site on Synapse.
+
+---
+
+# Bonus — Survival analysis
+
+> The material below talks in more detail about full-blown survival analysis — feel free to take a look. We may only cover some or none in the call.
+
+Finally, in practice we are ignoring a lot of information. We know more fine detail about survival than just whether someone was alive at 5 years. For example, in this dichotomy two patients who died 1 month after diagnosis, or 4.99 years after diagnosis, would both be "dead at 5 years" and be counted the same. Similarly someone who died at 5.01 years would be "alive at 5 years" and so would someone who is still alive 30 years later.
+
+Survival analysis accounts for this. Let's load the survival analysis packages and look at some of the variables
+
+```{r}
+library(survival)
+table(metabric_disc_clin_df$last_follow_up_status)
+```
+
+The above table indicates the number who were 'a'live versus dead (for various reasons) at the last time they were followed up, which is the variable `T` coded in days.
+
+```{r}
+metabric_disc_clin_df$fu_yrs = metabric_disc_clin_df$T/365
+hist(metabric_disc_clin_df$fu_yrs)
+```
+
+We'll use a different variable, `OS_Status`, that indicates the "overall survival" status at the last followup time. This is typically coded as '1' for dead and '0' for alive. And it can be for any reason, not just death due to cancer. On the one hand, this includes someone who was run over by a car, but in practice definitively saying that someone died because of their cancer is hard.
+
+```{r}
+table(metabric_disc_clin_df$OS_Status, metabric_disc_clin_df$last_follow_up_status)
+```
+
+Finally, R uses something called a survival variable which conveniently puts that status and time in one place. You can see that it is a vector with the time, and a '+' attached if the person was censored (alive) at that time
+
+```{r}
+metabric_disc_clin_df$surv = Surv(
+  metabric_disc_clin_df$T / 365 * 12, 
+  metabric_disc_clin_df$OS_Status
+)
+metabric_disc_clin_df$surv
+```
+
+R uses the `coxph()` function to model censored outcome as a function of predictors — in this case, we can model survival as a function of age.
+
+```{r}
+summary(coxph(surv ~ age_at_diagnosis, data = metabric_disc_clin_df))
+```
+
+In the above, each increase of age by 1 year is associated with 1.03-fold increase in risk of death
+
+Breast cancer was one of the first cancers to be split into groups based on gene expression pattern. These are called intrinsic types, or PAM50 groups. Since this splits patients into groups we can generate the Kaplan Meier plot. Note, we can limit the analysis to patients who are <70 years old to isolate part of the effect that older patients are likely to die sooner anyway.
+
+```{r}
+byPam50 <- table(metabric_disc_clin_df$Pam50Subtype)
+plot(survfit(surv ~ Pam50Subtype, data = metabric_disc_clin_df, 
+             subset = age_at_diagnosis < 70), col = rainbow(6))
+legend("topright", names(byPam50), text.col = rainbow(6))
+```
+
+Back to AURKA — how strongly is it associated with outcome and in which direction?
+
+```{r}
+coxph(metabric_disc_clin_df$surv ~ aurka)
+```
+
+We can define groups of patients according to whether they have "high" or "low" expression of AURKA by whether their's is higher or lower than the median.
+
+```{r}
+median(aurka)
+aurka_hi <- rep(FALSE, length(aurka))
+aurka_hi[aurka > median(aurka)] <- TRUE
+aurka[1:10]
+aurka_hi[1:10]
+```
+
+Then we can fit a coxph model to this split, and also examine the Kaplan Meier.
+
+```{r}
+plot(survfit(metabric_disc_clin_df$surv ~ aurka_hi), 
+     col = c("green", "red"), xlab = "Years", ylab = "Proportion surviving",
+     main="Survival vs AURKA")
+legend("topright", c("Low","High"), text.col = c("green", "red"))
+coxph(metabric_disc_clin_df$surv ~ aurka_hi)
+```
+
+That's it! In principal you could now write a function that makes a table of the relationship of all genes to overall survival, and select one or more that are most prognostic.
