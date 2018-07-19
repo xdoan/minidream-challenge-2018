@@ -25,5 +25,4 @@ score_submission <- function(submission_filename) {
   answers$prediction <- NULL
   answers
 }
-score_submission("modules/module5/jaeddy_activity-5.yml")
 
