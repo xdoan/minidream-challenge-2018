@@ -51,7 +51,15 @@ module_config = [
     {
         "fileName": "activity-3.yml",
         "module": 3
-    }
+    },
+    {
+        "fileName": "activity-4.yml",
+        "module": 4
+    },
+    {
+        "fileName": "activity-5.yml",
+        "module": 5
+    },
 ]
 
 
