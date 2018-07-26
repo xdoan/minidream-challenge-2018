@@ -33,7 +33,7 @@ ADMIN_USER_IDS = [2223305, 3324230]
 ##   evaluations = list(syn.getEvaluationByContentSource('syn3375314'))
 ## Configuring them here as a list will save a round-trip to the server
 ## every time the script starts and you can link the challenge queues to
-## the correct scoring/validation functions.  Predictions will be validated and 
+## the correct scoring/validation functions.  Predictions will be validated and
 
 module_config = [
     {
@@ -60,6 +60,10 @@ module_config = [
         "fileName": "activity-5.yml",
         "module": 5
     },
+    {
+        "fileName": "activity-6.yml",
+        "module": 6
+    },
 ]
 
 
@@ -75,6 +79,11 @@ def score(submission):
     robjects.r("source('%s')" % filePath)
     scoring_func = robjects.r('score_submission')
 
+    if moduleNo == 6:
+        entity_annots = syn.getAnnotations(submission.entityId)
+        with open(submission.filePath, 'wb') as f:
+            f.write(entity_annots['yaml'][0])
+    
     results = scoring_func(submission.filePath)
     annotations = {key:value[0] for key, value in zip(results.names, results)}
     annotations['module'] = "Module %s" % moduleNo
@@ -138,5 +147,3 @@ def score_submission(evaluation, submission):
     config = evaluation_queue_by_id[int(evaluation.id)]
     score = config['scoring_func'](submission)
     return (score, "You did fine!")
-
-
