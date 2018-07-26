@@ -164,3 +164,19 @@ submit_module_answers <- function(module, local = FALSE) {
   
 
 }
+
+create_dummy_files <- function(module, submission_folder) {
+  minidream_roster_df %>% 
+    filter(!is.na(SynapseUserName)) %>% 
+    pluck("SynapseUserName") %>% 
+    walk(
+      function(x) { 
+        text <- str_glue("this is a placeholder file for {s}", s = x)
+        filename <- str_glue("module{m}_submissions/{s}_activity-{m}.yml", 
+                             m = module, s = x) 
+        write_yaml(text, filename)
+        syn_id = synStore(File(path = filename, parentId = submission_folder))
+        print(syn_id) 
+      }
+    )
+}
