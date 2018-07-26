@@ -80,7 +80,7 @@ def score(submission):
     scoring_func = robjects.r('score_submission')
 
     if moduleNo == 6:
-        entity_annots = syn.getAnnotations(submission.entityId)
+        entity_annots = submission.entity['annotations']
         with open(submission.filePath, 'wb') as f:
             f.write(entity_annots['yaml'][0])
     
