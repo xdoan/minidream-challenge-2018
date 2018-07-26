@@ -67,10 +67,12 @@ username_match <- all_users %>%
   stringdist_right_join(
     roster_df %>% 
       filter(!is.na(Email)) %>% 
-      mutate(tmp_username = str_replace(Email, "@.*", "")),
+      mutate(tmp_username = str_replace(Email, "(@|\\.).*", ""),
+             tmp_username = ifelse(Name == "Jeffrey Chang",
+                                   "jchang", tmp_username)),
     .,
     by = c("tmp_username" = "userName"),
-    max_dist = 4) %>%
+    max_dist = 3) %>%
   select(-tmp_name, -tmp_username, -teamId) 
 
 # combine results
@@ -144,7 +146,10 @@ minidream_roster_df <- minidream_roster_df %>%
             by = c("SynapseID" = "userId")) %>% 
   distinct() %>% 
   group_by(Name) %>% 
-  mutate(SubmittedModules = str_c(stringAnnos_module, collapse = ", ")) %>% 
+  arrange(stringAnnos_module) %>% 
+  mutate(NumSubmitted = n_distinct(stringAnnos_module, na.rm = TRUE),
+         SubmittedModules = str_c(stringAnnos_module, collapse = ", ")) %>%
+  ungroup() %>% 
   select(-stringAnnos_module) %>% 
   distinct()
 
@@ -159,7 +164,7 @@ as_table_columns <- function(df) {
     integer = "INTEGER"
   )
   syn_col_types <- map(col_types, function(x) { syn_type_map[[x]] })
-  max_lengths <- summarize_all(df, funs(max(str_length(.)) + 50L))
+  max_lengths <- summarize_all(df, funs(max(str_length(.), na.rm = TRUE) + 50L))
   map(colnames(df), function(col) {
     if (syn_col_types[[col]] == "STRING") {
       Column(name = col, columnType = syn_col_types[[col]],
