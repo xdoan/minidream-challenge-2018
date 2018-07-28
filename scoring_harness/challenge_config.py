@@ -81,7 +81,7 @@ def score(submission):
 
     if moduleNo == 6:
         entity_annots = submission.entity['annotations']
-        with open(submission.filePath, 'wb') as f:
+        with open(submission.filePath, 'w') as f:
             f.write(entity_annots['yaml'][0])
     
     results = scoring_func(submission.filePath)
