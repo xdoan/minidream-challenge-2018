@@ -118,6 +118,29 @@ create_module5_submission <- function() {
   submission_filename
 }
 
+create_module7_submission <- function() {
+  submission_filename <- paste(Sys.getenv("USER"), "activity-7.yml", sep = "_")
+  
+  celladhesion_count <<- my_celladhesion_count
+  myosin_count <<- my_myosin_count
+  cms_match <<- my_cms_match
+  explanation <<- my_explanation
+  pathway_count <<- my_pathway_count
+  takeaway <<- my_takeaway
+  
+  answers <- list(
+    celladhesion_count = celladhesion_count, 
+    myosin_count = myosin_count,
+    cms_match = cms_match,
+    explanation = explanation,
+    pathway_count  = pathway_count,
+    takeaway = takeaway
+  )
+  
+  write_yaml(answers, submission_filename)
+  submission_filename
+}
+
 submit_module_answers <- function(module, local = FALSE) {
   if (is.numeric(module)) {
     module <- as.character(module)
@@ -129,7 +152,8 @@ submit_module_answers <- function(module, local = FALSE) {
     "2" = create_module2_submission(),
     "3" = create_module3_submission(),
     "4" = create_module4_submission(),
-    "5" = create_module5_submission()
+    "5" = create_module5_submission(),
+    "7" = create_module7_submission()
   )
   submission_folder <- switch(
     module,
@@ -138,7 +162,8 @@ submit_module_answers <- function(module, local = FALSE) {
     "2" = "syn12554002",
     "3" = "syn12617172",
     "4" = "syn13363278",
-    "5" = "syn14281722"
+    "5" = "syn14281722",
+    "7" = "syn15568853"
   )
   
   if (!local) {
