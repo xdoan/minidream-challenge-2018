@@ -41,7 +41,7 @@ score_submission <- function(submission_filename) {
       sp_in_range = sp_test >= subPosMin & sp_test <= subPosMax
     )
   
-  msg_1 <- str_glue(
+  msg_1 <- glue(
     "{cs_sd} of your simulated data points for number of bound ",
     "clutches and {sp_sd} of substrate position points were ",
     "within one standard deviation of the mean values from our ",
@@ -51,7 +51,7 @@ score_submission <- function(submission_filename) {
     sp_sd = sprintf("%0.2f%%", mean(sp_check_df$sp_in_sd) * 100)
   )
   
-  msg_2 <- str_glue(
+  msg_2 <- glue(
     "{cs_ir} of your data points number of bound clutches and {sp_ir} ",
     "of substrate position points were within the full range of values ",
     "observed across our 100 simulations. Does that look better?",
@@ -67,4 +67,3 @@ score_submission <- function(submission_filename) {
   answers
 }
 
-score_submission('jaeddy_activity-6.yml')

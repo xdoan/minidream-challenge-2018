@@ -41,4 +41,3 @@ score_submission <- function(submission_filename) {
   answers
 }
 
-score_submission('jaeddy_activity-7.yml')
