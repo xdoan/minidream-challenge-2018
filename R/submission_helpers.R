@@ -123,6 +123,7 @@ create_module7_submission <- function() {
   
   celladhesion_count <<- my_celladhesion_count
   myosin_count <<- my_myosin_count
+  high_cellline <<- my_high_cellline
   cms_match <<- my_cms_match
   explanation <<- my_explanation
   pathway_count <<- my_pathway_count
@@ -131,6 +132,7 @@ create_module7_submission <- function() {
   answers <- list(
     celladhesion_count = celladhesion_count, 
     myosin_count = myosin_count,
+    high_cellline = high_cellline,
     cms_match = cms_match,
     explanation = explanation,
     pathway_count  = pathway_count,
