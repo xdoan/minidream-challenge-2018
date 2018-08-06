@@ -51,7 +51,7 @@ load(file.path(data_dir, "pson_motility_tidy_df.RData"))
 Use your favorite function to take a peek at the content of `pson_motility_tidy_df` (`str()` is always a good choice, or you could also try out `glimpse()` from one of the tidyverse packages called **dplyr**).
 
 ```{r}
-str(pson_motil_tidy_df)
+glimpse(pson_motil_tidy_df)
 ```
 
 It may be obvious from inspecting the overall dataframe, but we can see that this table includes data for several different cell lines. The `distinct()` function is a handy way to summarize which diagnosis values are included:
@@ -172,7 +172,7 @@ If you've ever worked with pivot tables in Excel, the **tidyr** package provides
 ```{r}
 pson_motil_tidy_df %>% 
   filter(diagnosis == "Breast Cancer") %>%
-  select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
+  dplyr::select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
   spread(summary_metric, average_value)
 ```
 
@@ -184,7 +184,7 @@ Back to plotting... Let's make a simple scatter plot of "total distance" values 
 ```{r}
 pson_motil_tidy_df %>% 
   filter(diagnosis == "Breast Cancer") %>%
-  select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
+  dplyr::select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
   spread(summary_metric, average_value) %>% 
   ggplot(aes(x = speed_um_hr, y = total_distance_um)) +
   geom_point(aes(colour = experimentalCondition, shape = cellLine), size = 3)
@@ -195,7 +195,7 @@ Seems pretty correlated... ggplot also provides layers for adding best fit lines
 ```{r}
 pson_motil_tidy_df %>% 
   filter(diagnosis == "Breast Cancer") %>%
-  select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
+  dplyr::select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
   spread(summary_metric, average_value) %>% 
   ggplot(aes(x = speed_um_hr, y = total_distance_um)) +
   geom_point(aes(colour = experimentalCondition, shape = cellLine), size = 3) +
@@ -207,7 +207,7 @@ We'll get a little more advanced here and look at the pairwise correlation betwe
 ```{r}
 pson_motil_tidy_df %>% 
   filter(diagnosis == "Breast Cancer") %>%
-  select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
+  dplyr::select(cellLine, experimentalCondition, summary_metric, average_value) %>% 
   group_by(summary_metric, cellLine) %>% 
   mutate(average_value_norm = average_value / max(average_value)) %>% 
   ungroup() %>% 
@@ -234,11 +234,15 @@ brca_motility_df <- pson_motil_tidy_df %>%
     surface == "Glass" ~ 1000,
     TRUE ~ stiffness_norm
   )) %>% 
-  select(-summary_metric, -average_value, -average_value_scaled,
+  dplyr::select(-summary_metric, -average_value, -average_value_scaled,
          -standard_deviation, -standard_error) %>% 
   nest(average_value_norm) %>% 
   mutate(motility = map_dbl(data, ~ colMeans(., na.rm = TRUE))) %>% 
-  select(-data)
+  dplyr::select(-data)
+```
+
+```{r}
+brca_motility_df
 ```
 
 Now that we have a subsetted and updated dataframe, we can get back to our exploration of motility with respect to condition.
@@ -325,6 +329,11 @@ knitr::include_graphics("cms_fig6.png")
 ## Estimating motor and clutch abundance
 
 To shortcut things a bit, we've grabbed data for genes belonging to one of two categories: myosin (~ clutches) and cell adhesion (~ motors). We'll use these categories to represent the red and blue lines from the figure.
+
+```{r}
+gene_df
+```
+
 
 ```{r}
 myosin_genes <- gene_df %>% 
@@ -445,7 +454,7 @@ synLogin(silent = TRUE)
 submission <- submit_module_answers(module = 7)
 ```
 
-Congrats — you’ve reached the end of **Module 4**! You can now return to the **mini-DREAM Challenge** site on Synapse.
+Congrats — you’ve reached the end of **Module 7**! You can now return to the **mini-DREAM Challenge** site on Synapse.
 
 ---
 
@@ -476,7 +485,7 @@ pson_logtpm_pca_df <- pson_logtpm_pca %>%
 
 ```{r}
 pson_logtpm_pca_df %>% 
-  left_join(select(pson_motil_tidy_df, sample, diagnosis), 
+  left_join(dplyr::select(pson_motil_tidy_df, sample, diagnosis), 
             by = c("row" = "sample")) %>% 
   distinct() %>% 
   spread(PC, value) %>% 
