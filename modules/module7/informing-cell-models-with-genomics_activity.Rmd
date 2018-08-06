@@ -367,8 +367,8 @@ brca_motorclutch_df %>%
 
 ```{r}
 # fill in the number of genes for each type
-my_celladhesion_count <- 37
-my_myosin_count <- 68
+my_celladhesion_count <- 0
+my_myosin_count <- 0
 ```
 
 Let's take a look at the plot.
@@ -404,9 +404,9 @@ Does the trend here match the results from the CMS figure? Elaborate on your ans
 
 ```{r}
 # select "yes" or "no"
-my_cms_match <- "no"
+my_cms_match <- ""
 
-my_explanation <- "The sets of genes we selected to represent myosin and cell adhesion molecule expression might not match the specific proteins modeled in the CMS. The motility measurements also show large variance in the T-47D data points, indicating that comparisons with MDA-MB-231 could be unreliable. Finally, the units of our values for motility and stiffness are different than those used for model parameters, so the trends might not directly translate."
+my_explanation <- ""
 ```
 
 
@@ -435,9 +435,9 @@ knitr::include_graphics("hsa04810.pathview.multi.png")
 How many genes from our data show up in the pathway map (red boxes)? How does this influence your interpretation of the results and our approach?
 
 ```{r}
-my_pathway_count <- 3
+my_pathway_count <- 0
 
-my_takeaway <- "Even though we have over 100 genes in our myosin/cell adhesion set, only a small number of these appear to map to (at least one) known cell migration pathway. This doesn't rule out other causes for the discrepancy between CMS and our results. However, the next thing I would try would be identifying a set of genes that more closely map to components in the model."
+my_takeaway <- ""
 ```
 
 ## Submitting the prediction
