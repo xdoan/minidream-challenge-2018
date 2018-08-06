@@ -64,6 +64,10 @@ module_config = [
         "fileName": "activity-6.yml",
         "module": 6
     },
+    {
+        "fileName": "activity-7.yml",
+        "module": 7
+    },
 ]
 
 
