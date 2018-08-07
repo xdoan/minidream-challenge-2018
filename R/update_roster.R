@@ -140,17 +140,27 @@ minidream_roster_df <- roster_augmented_df %>%
 # check submissions -------------------------------------------------------
 
 source(file.path(here::here("R"), "collect_submissions.R"))
+submission_df <- submission_df %>% 
+  filter(stringAnnos_module == "Module 6") %>% 
+  mutate(SynapseUserName = str_replace(name, "_activity.*", "")) %>% 
+  left_join(select(roster_augmented_df, SynapseUserName, SynapseID)) %>% 
+  mutate(userId = SynapseID) %>% 
+  select(-SynapseUserName, SynapseID) %>% 
+  bind_rows(filter(submission_df, stringAnnos_module != "Module 6"))
 
-minidream_roster_df <- minidream_roster_df %>% 
-  left_join(select(submission_df, userId, stringAnnos_module), 
-            by = c("SynapseID" = "userId")) %>% 
-  distinct() %>% 
-  group_by(Name) %>% 
-  arrange(stringAnnos_module) %>% 
-  mutate(NumSubmitted = n_distinct(stringAnnos_module, na.rm = TRUE),
-         SubmittedModules = str_c(stringAnnos_module, collapse = ", ")) %>%
-  ungroup() %>% 
-  select(-stringAnnos_module) %>% 
+minidream_roster_df <- minidream_roster_df %>%
+  left_join(select(submission_df, userId, stringAnnos_module),
+    by = c("SynapseID" = "userId")
+  ) %>%
+  distinct() %>%
+  group_by(Name) %>%
+  arrange(stringAnnos_module) %>%
+  mutate(
+    NumSubmitted = n_distinct(stringAnnos_module, na.rm = TRUE),
+    SubmittedModules = str_c(stringAnnos_module, collapse = ", ")
+  ) %>%
+  ungroup() %>%
+  select(-stringAnnos_module) %>%
   distinct()
 
 # create/update Synapse table ---------------------------------------------

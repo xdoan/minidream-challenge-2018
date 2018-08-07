@@ -1,0 +1,198 @@
+---
+title: "mini-DREAM 2018 Submissions"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(UpSetR)
+library(tm)
+library(wordcloud)
+library(plotly)
+library(lubridate)
+
+load("../data/submission_data.RData")
+```
+
+Row {.tabset .tabset-fade} 
+-----------------------------------------------------------------------
+
+
+### Submissions per Module
+
+
+```{r}
+x <- minidream_roster_df %>% 
+  filter(SynapseTeamName != "2018 mini-DREAM Admins") %>% 
+  mutate(Module = str_split(SubmittedModules, ", ")) %>% 
+  unnest(Module) %>%  
+  select(Name, Module, SynapseTeamName) %>% 
+  replace_na(list(Module = "None"))
+
+modules <- rev(c("Module 0", "Module 1", "Module 2", "Module 3", "Module 4", 
+                 "Module 5", "Module 6", "Module 7"))
+all <- expand(x, Module, nesting(Name, SynapseTeamName))
+
+filter_team <- function(row, team_name) {
+  data <- (row["SynapseTeamName"] %in% team_name)
+}
+```
+
+```{r}
+p <- all %>% 
+  left_join(x %>% mutate(count = 1L)) %>%
+  replace_na(list(count = 0L)) %>% 
+  group_by(Module, SynapseTeamName) %>% 
+  summarise(total = sum(count), 
+            team_size = n_distinct(Name),
+            fraction = total / team_size) %>% 
+  ungroup() %>% 
+  mutate(label = str_glue('<b>Fraction of group:</b> {sprintf("%0.3f", f)}\n',
+                          '<b>Module:</b> {m}\n',
+                          '({n} of {s} students)',
+                          f = fraction, m = Module, n = total, s = team_size)) %>% 
+  ggplot(aes(x = Module, y = total, text = label)) +
+  geom_col(aes(fill = fraction, colour = SynapseTeamName)) +
+  scale_colour_manual(values = c("#E69F00", "#222222")) +
+  guides(fill = FALSE) +
+  facet_wrap(~ SynapseTeamName, ncol = 1) +
+  ylab("Total Submissions")
+ggplotly(p, tooltip = "text") %>% 
+  plotly::layout(showlegend = FALSE,
+                 font = list(family = "Roboto, Open Sans, sans-serif"))
+```
+
+> This is a fairly simple plot showing the total number of submissions for each module among students from each group. The brightness of each bar is proportional to the fraction of students (from each respective team) who submitted for that module.  The output of `ggplot2` was wrapped with the R package for the [Plotly](https://plot.ly/r/) graphing library to make the chart more interactive.
+
+
+### Submission Upset Chart
+
+```{r}
+all %>% 
+  left_join(x %>% mutate(count = 1L)) %>%
+  replace_na(list(count = 0L)) %>% 
+  spread(Module, count) %>% 
+  as.data.frame() %>% 
+  upset(
+    sets = modules, keep.order = TRUE,
+    queries = list(
+      list(
+        query = elements,
+        params = list("SynapseTeamName", 
+                      "2018 CSBC PSON Summer Undergraduate Fellows"),
+        color = "#E69F00",
+        active = T
+      )
+    )
+  )
+```
+
+
+> This plot was created with the [UpSetR](https://cran.r-project.org/web/packages/UpSetR/vignettes/basic.usage.html) package, which provides a much more powerful way to visualize the overlap between sets than Venn Diagrams (especially when you have more than 3 groups). Each "column" represents an intersect (e.g., submissions for "modules 0 and 1", or "modules 0, 2, and 4") shown by connected dots. The bars show the number of students who have submitted each particular combination of module. Yellow and black segments of the bars represent SRP Undergrad Fellows and other mini-DREAM participants, respectively.
+
+
+
+
+### Submissions over Time
+
+```{r}
+meeting_dates <-
+c(
+  seq(ymd("2018-06-07"), ymd("2018-06-21"), by = "day"), 
+  seq(ymd("2018-07-10"), ymd("2018-08-07"), by = "day")
+  ) %>% 
+  subset(weekdays(.) %in% c("Thursday")) %>% 
+  append(ymd("2018-06-25")) %>% 
+  as_datetime(tz = "UTC")
+
+
+
+all_submissions_df <- submission_df %>%
+  filter(userId != "2223305") %>% 
+  select(Submitted = createdOn, Module = stringAnnos_module) %>%
+  mutate(Submitted = as_datetime(Submitted), num = 1) %>%
+  arrange(Submitted) %>%
+  add_row(Submitted = now() + days(1), Module = str_c("Module ", 0:7),
+          num = 0) %>%
+  group_by(Module) %>% 
+  mutate(ModuleTotal = cumsum(num)) %>% 
+  ungroup() %>% 
+  mutate(Total = cumsum(num),
+         label_all = str_glue(
+           '<b>Submitted:</b> {s}\n',
+           '<b>Module:</b> {m}\n',
+           '<b>Total:</b> {t}\n',
+           '<b>Total for module:</b> {mt}',
+           s = Submitted, m = Module, t = Total, mt = ModuleTotal
+         ))
+
+daily_submissions_df <- all_submissions_df %>%
+  mutate(Date = floor_date(Submitted, unit = "days")) %>% 
+  group_by(Module, Date) %>%
+  summarize(datenum = sum(num)) %>%
+  ungroup() %>% 
+  complete(Date = full_seq(Date, 3600*24), Module, fill = list(datenum = 0)) %>% 
+  arrange(Date) %>% 
+  group_by(Module) %>%
+  mutate(DateTotal = cumsum(datenum)) %>%
+  ungroup() %>% 
+  mutate(Module = fct_rev(Module),
+         Meeting = Date %in% meeting_dates)
+  
+p <- daily_submissions_df %>%
+  ggplot(aes(x = Date, y = DateTotal)) +
+  geom_area(aes(fill = Module),
+            alpha = 0.5, position = "stack") +
+  geom_col(data = filter(daily_submissions_df, Meeting), 
+           aes(y = 50), alpha = 0.5, width = 100000) +
+  geom_point(data = all_submissions_df,
+             aes(x = Submitted, y = Total, text = label_all, fill = Module), 
+             alpha = 0.7, shape = 21, colour = "black", 
+             stroke = 0.3, size = 2.5) +
+  scale_fill_brewer(palette = "Set1", direction = -1) +
+  scale_x_datetime(limits = c(as_datetime("2018-06-07"), as_datetime("2018-08-07") + 1)) +
+  guides(alpha = FALSE) +
+  ylab("Number of Submissions") +
+  ylim(c(0, max(all_submissions_df$Total) + 2))
+
+ggplotly(p, tooltip = "text") %>% 
+  layout(font = list(family = "Roboto, Open Sans, sans-serif"))
+```
+
+> The points in the scatterplot show submissions over time, colored according to module. In the background, you can also see the cumulative submissions for all modules across days. The gray bars indicate which days we met as a group to participate in module activities.
+
+
+### Submission Wordcloud
+
+```{r}
+submission_text <- submission_df %>% 
+  select(starts_with("stringAnnos")) %>% 
+  rename_all(~ str_replace(., "stringAnnos_", "")) %>% 
+  select(-team, -userName, -module) %>% 
+  unlist() %>% 
+  as.character()
+
+my_corpus <- Corpus(VectorSource(submission_text))
+my_corpus = tm_map(my_corpus, content_transformer(tolower))
+my_corpus = tm_map(my_corpus, removePunctuation)
+my_corpus = tm_map(my_corpus, removeNumbers)
+my_corpus = tm_map(my_corpus, removeWords,
+                  c(stopwords("SMART"), 
+                    "thy", "thou", "thee", "the", "and", "but", "—"))
+my_dtm = TermDocumentMatrix(my_corpus,
+              control = list(minWordLength = 1))
+  
+m = as.matrix(my_dtm)
+m_sorted <- sort(rowSums(m), decreasing = TRUE)
+v <- m_sorted[setdiff(names(m_sorted), "—")]
+wordcloud(names(v), v, scale = c(3.5, 0.5),
+          min.freq = 5, max.words = 200,
+          colors = brewer.pal(8, "Dark2"))
+```
+
+> This word cloud was generated by aggregating all text from the Module 0 through Module 7 scoreboards. The `tm` and `wordcloud` packages were used to parse, count, and visualize the frequency of different terms. 
+
