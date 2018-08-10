@@ -18,6 +18,17 @@ library(lubridate)
 load("../data/submission_data.RData")
 ```
 
+Inputs {.sidebar} 
+-----------------------------------------------------------------------
+
+---
+
+This page summarizes results from the **2018 mini-DREAM Challenge**, as recorded in the [**scoreboards**](https://www.synapse.org/#!Synapse:syn12105406/wiki/527872) on Synapse.
+
+---
+
+*Last updated `r now()`*
+
 Row {.tabset .tabset-fade} 
 -----------------------------------------------------------------------
 
