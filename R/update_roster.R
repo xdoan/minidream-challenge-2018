@@ -14,8 +14,8 @@ roster_df <- read_tsv(roster_file) %>%
 user_teams <- unique(roster_df$SynapseTeamID) %>% 
   set_names(.)
 
-project <- synGet("syn12105406")
-participant_team <- "3373496"
+project <- synGet("syn18813072")
+participant_team <- "3390083"
 
 
 # get team names ----------------------------------------------------------
@@ -189,16 +189,16 @@ project_tables <- synGetChildren(project, includeTypes = list("table")) %>%
   as.list() %>% 
   map_df(~ as_tibble(.x))
 
-if ("2018 mini-DREAM Roster" %in% project_tables$name) {
+if ("2019 mini-DREAM Roster" %in% project_tables$name) {
   table_id <- project_tables %>% 
-    filter(name == "2018 mini-DREAM Roster") %>% 
+    filter(name == "2019 mini-DREAM Roster") %>% 
     pluck("id")
   rows_to_delete <- synTableQuery(str_glue("select * from {id}", id = table_id))
   synDelete(rows_to_delete)
   schema <- synGet(table_id)
 } else {
   cols <- as_table_columns(minidream_roster_df)
-  schema <- Schema(name = '2018 mini-DREAM Roster', 
+  schema <- Schema(name = '2019 mini-DREAM Roster', 
                    columns = cols, parent = project)
 }
 table <- Table(schema, minidream_roster_df)
