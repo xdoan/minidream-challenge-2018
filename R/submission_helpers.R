@@ -159,13 +159,13 @@ submit_module_answers <- function(module, local = FALSE) {
   )
   submission_folder <- switch(
     module,
-    "0" = "syn12369913",
-    "1" = "syn12440746",
-    "2" = "syn12554002",
-    "3" = "syn12617172",
-    "4" = "syn13363278",
-    "5" = "syn14281722",
-    "7" = "syn15568853"
+    "0" = "syn18818751",
+    "1" = "syn18818752",
+    "2" = "syn18818753",
+    "3" = "syn18818755",
+    "4" = "syn18818756",
+    "5" = "syn18818757",
+    "7" = "syn18818759"
   )
   
   if (!local) {
@@ -173,7 +173,7 @@ submit_module_answers <- function(module, local = FALSE) {
     activity_submission <- synStore(
       File(path = submission_filename, parentId = submission_folder)
     )
-    submission <- synSubmit(evaluation = "9612371", 
+    submission <- synSubmit(evaluation = "9614247", 
                             entity = activity_submission)
     
     message("")
