@@ -12,14 +12,14 @@ import os
 ## A Synapse project will hold the assetts for your challenge. Put its
 ## synapse ID here, for example
 ## CHALLENGE_SYN_ID = "syn1234567"
-CHALLENGE_SYN_ID = "syn12105406"
+CHALLENGE_SYN_ID = "syn18813072"
 
 ## Name of your challenge, defaults to the name of the challenge's project
-CHALLENGE_NAME = "CSBC PS-ON mini-DREAM Challenge"
+CHALLENGE_NAME = "2019 CSBC PS-ON mini-DREAM Challenge"
 
 ## Synapse user IDs of the challenge admins who will be notified by email
 ## about errors in the scoring script
-ADMIN_USER_IDS = [2223305, 3324230]
+ADMIN_USER_IDS = [3382314, 3376089]
 
 ## Each question in your challenge should have an evaluation queue through
 ## which participants can submit their predictions or models. The queues
@@ -96,7 +96,7 @@ def score(submission):
 
 evaluation_queues = [
     {
-        'id':9612371,
+        'id':9614247,
         'scoring_func':score,
     }
 ]
