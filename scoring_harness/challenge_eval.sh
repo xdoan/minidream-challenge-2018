@@ -5,7 +5,7 @@ script_dir=$(dirname $0)
 if [ ! -d "$script_dir/log" ]; then
   mkdir $script_dir/log
 fi
-source ~/miniconda/bin/activate ~/miniconda/envs/minidream
+source /home/shared_mnik_xdo/miniconda/bin/activate /home/shared_mnik_xdo/miniconda/envs/minidream
 
 
 #---------------------
