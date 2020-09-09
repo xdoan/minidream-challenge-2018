@@ -2,6 +2,7 @@
 import rpy2.robjects as robjects
 import os
 
+
 ##-----------------------------------------------------------------------------
 ##
 ## challenge specific code and configuration
@@ -12,10 +13,10 @@ import os
 ## A Synapse project will hold the assetts for your challenge. Put its
 ## synapse ID here, for example
 ## CHALLENGE_SYN_ID = "syn1234567"
-CHALLENGE_SYN_ID = "syn18813072"
+CHALLENGE_SYN_ID = "syn22149791"
 
 ## Name of your challenge, defaults to the name of the challenge's project
-CHALLENGE_NAME = "2019 CSBC PS-ON mini-DREAM Challenge"
+CHALLENGE_NAME = "2020 CSBC PS-ON mini-DREAM Challenge"
 
 ## Synapse user IDs of the challenge admins who will be notified by email
 ## about errors in the scoring script
@@ -75,19 +76,20 @@ module_by_name = {q['fileName']:q for q in module_config}
 
 def score(submission):
     fileName = os.path.basename(submission.filePath)
-    fileNameSplit = fileName.split("_")
-    moduleName = fileNameSplit[1]
+    fileNameSplit = fileName.split("_activity") 
+    moduleName = "activity" + fileNameSplit[1]
     moduleNo = module_by_name[moduleName]["module"]
     userName = fileNameSplit[0]
     filePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'../modules/module%s/.eval/eval_fxn.R' % moduleNo)
     robjects.r("source('%s')" % filePath)
     scoring_func = robjects.r('score_submission')
-
+    print(filePath)
+    '''
     if moduleNo == 6:
         entity_annots = submission.entity['annotations']
         with open(submission.filePath, 'w') as f:
             f.write(entity_annots['yaml'][0])
-    
+    '''
     results = scoring_func(submission.filePath)
     annotations = {key:value[0] for key, value in zip(results.names, results)}
     annotations['module'] = "Module %s" % moduleNo
@@ -96,7 +98,7 @@ def score(submission):
 
 evaluation_queues = [
     {
-        'id':9614247,
+        'id':9614551,
         'scoring_func':score,
     }
 ]

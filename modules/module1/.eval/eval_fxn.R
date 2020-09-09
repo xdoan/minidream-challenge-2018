@@ -3,11 +3,12 @@ library(tidyverse)
 library(glue)
 library(rprojroot)
 
-root_dir <- find_root(is_rstudio_project, thisfile())
-data_dir <- file.path(root_dir, "data")
+#root_dir <- find_root(is_rstudio_project, thisfile())
+#data_dir <- file.path(root_dir, "data")
 
 score_submission <- function(submission_filename) {
 
+  data_dir <- "/home/mnikolov/environment/minidream-r-env/home/rstudio/shared/data"
   load(file.path(data_dir, "pson_expr_tpm_df.RData"))
   load(file.path(data_dir, "pson_expr_gene_info.RData"))
   load(file.path(data_dir, "pson_motility_tidy_df.RData"))
